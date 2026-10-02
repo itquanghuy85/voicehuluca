@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voice_huluca/core/app/app_settings_opener.dart';
+import 'package:voice_huluca/core/audio/recording_analyzer.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
@@ -167,12 +168,39 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
           _error = AppStrings.recordVoiceFailed;
         }
       });
+      if (path == null) return;
+
+      // Refuse a silent sample here: cloning it produces a voice the user
+      // cannot hear and cannot use.
+      final quality = await _analyzeSample(path);
+      if (!mounted) return;
+      setState(() {
+        if (!quality.hasSpeech) {
+          _recordingPath = null;
+          _elapsed = Duration.zero;
+          _error = AppStrings.recordVoiceSilent;
+          return;
+        }
+        _recordingPath = path;
+        _elapsed = quality.duration > _elapsed ? quality.duration : _elapsed;
+        _error = null;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isRecording = false;
         _error = AppStrings.recordVoiceFailed;
       });
+    }
+  }
+
+  Future<RecordingQuality> _analyzeSample(String path) async {
+    try {
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      return analyzeWavBytes(bytes);
+    } catch (_) {
+      return RecordingQuality.silent;
     }
   }
 

@@ -11,6 +11,7 @@ class VoiceCard extends StatelessWidget {
     required this.voice,
     required this.isSelected,
     required this.isPlaying,
+    this.isLoadingPreview = false,
     required this.onTap,
     required this.onPreviewPressed,
     required this.onFavoritePressed,
@@ -22,6 +23,7 @@ class VoiceCard extends StatelessWidget {
   final Voice voice;
   final bool isSelected;
   final bool isPlaying;
+  final bool isLoadingPreview;
   final VoidCallback onTap;
   final VoidCallback onPreviewPressed;
   final VoidCallback onFavoritePressed;
@@ -225,7 +227,8 @@ class VoiceCard extends StatelessWidget {
           tooltip: isPlaying
               ? AppStrings.generationPause
               : AppStrings.voiceSelectorPreview,
-          onPressed: onPreviewPressed,
+          onPressed: isLoadingPreview ? null : onPreviewPressed,
+          showSpinner: isLoadingPreview,
         ),
         _IconButton(
           icon: voice.isFavorite
@@ -329,17 +332,25 @@ class _IconButton extends StatelessWidget {
     required this.color,
     required this.tooltip,
     required this.onPressed,
+    this.showSpinner = false,
   });
 
   final IconData icon;
   final Color color;
   final String tooltip;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool showSpinner;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(icon),
+      icon: showSpinner
+          ? SizedBox(
+              width: AppSizes.touchTarget - AppSpacing.sm,
+              height: AppSizes.touchTarget - AppSpacing.sm,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: color),
+            )
+          : Icon(icon),
       color: color,
       iconSize: AppSizes.iconMedium,
       constraints: const BoxConstraints(

@@ -2200,6 +2200,8 @@ class AppStrings {
   static const String recordVoiceSave = 'Lưu giọng này';
   static const String recordVoiceCancel = 'Huỷ';
   static const String recordVoiceTooShort = 'Hãy ghi âm ít nhất 5 giây.';
+  static const String recordVoiceSilent =
+      'Không nghe thấy giọng nói trong bản ghi. Hãy kiểm tra micrô rồi ghi lại, đọc to và rõ trong khoảng 5-30 giây.';
   static const String recordVoiceTooLong = 'Đã đủ 30 giây, hãy dừng ghi.';
   static const String recordVoiceNameRequired =
       'Vui lòng đặt tên cho giọng mới.';

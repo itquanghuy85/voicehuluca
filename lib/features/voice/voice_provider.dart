@@ -37,6 +37,10 @@ class VoiceListState {
   final String? error;
   final int? selectedVoiceId;
   final int? playingVoiceId;
+
+  /// Voice whose preview is still being synthesised. A cloned voice can take a
+  /// minute on the local model, so the card needs to show progress.
+  final int? previewLoadingVoiceId;
   final String? previewError;
 
   const VoiceListState({
@@ -48,6 +52,7 @@ class VoiceListState {
     this.error,
     this.selectedVoiceId,
     this.playingVoiceId,
+    this.previewLoadingVoiceId,
     this.previewError,
   });
 
@@ -60,9 +65,11 @@ class VoiceListState {
     String? error,
     int? selectedVoiceId,
     int? playingVoiceId,
+    int? previewLoadingVoiceId,
     String? previewError,
     bool clearError = false,
     bool clearPreviewError = false,
+    bool clearPreviewLoading = false,
   }) {
     return VoiceListState(
       voices: voices ?? this.voices,
@@ -73,6 +80,9 @@ class VoiceListState {
       error: clearError ? null : (error ?? this.error),
       selectedVoiceId: selectedVoiceId ?? this.selectedVoiceId,
       playingVoiceId: playingVoiceId ?? this.playingVoiceId,
+      previewLoadingVoiceId: clearPreviewLoading
+          ? null
+          : (previewLoadingVoiceId ?? this.previewLoadingVoiceId),
       previewError: clearPreviewError
           ? null
           : (previewError ?? this.previewError),
@@ -396,8 +406,13 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
       await _stopPreview();
       return;
     }
+    if (state.previewLoadingVoiceId == voice.id) return;
     await _stopPreview();
-    state = state.copyWith(playingVoiceId: voice.id, clearPreviewError: true);
+    state = state.copyWith(
+      playingVoiceId: voice.id,
+      previewLoadingVoiceId: voice.id,
+      clearPreviewError: true,
+    );
     try {
       final audioBytes = await _remote.synthesize(
         voiceId: voice.providerVoiceId,
@@ -422,6 +437,10 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
         playingVoiceId: null,
         previewError: mapError(error),
       );
+    } finally {
+      if (state.previewLoadingVoiceId == voice.id) {
+        state = state.copyWith(clearPreviewLoading: true);
+      }
     }
   }
 

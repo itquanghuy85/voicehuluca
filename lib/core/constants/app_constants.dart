@@ -12,7 +12,9 @@ class AppConstants {
   static const int maxAudioFileSizeBytes = 50 * 1024 * 1024;
   static const int audioChunkSizeBytes = 8192;
 
-  static const Duration apiTimeout = Duration(seconds: 30);
+  /// Longer than [generationTimeout] so a slow local model (XTTS on CPU can
+  /// take minutes for a cloned voice) is never cut off by the HTTP client.
+  static const Duration apiTimeout = Duration(minutes: 6);
   static const Duration connectionTimeout = Duration(seconds: 10);
   static const Duration generationTimeout = Duration(minutes: 5);
   static const Duration splashDuration = Duration(seconds: 2);

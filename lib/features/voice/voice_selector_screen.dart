@@ -297,6 +297,7 @@ class _Body extends ConsumerWidget {
       voice: voice,
       isSelected: state.selectedVoiceId == voice.id,
       isPlaying: state.playingVoiceId == voice.id,
+      isLoadingPreview: state.previewLoadingVoiceId == voice.id,
       onTap: () => notifier.selectVoice(voice),
       onPreviewPressed: () => notifier.togglePreview(voice),
       onFavoritePressed: () => notifier.toggleFavorite(voice),
