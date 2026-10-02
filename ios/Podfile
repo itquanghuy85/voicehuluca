@@ -37,14 +37,18 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  pinned = []
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
-    # Flutter stamps plugin podspecs with its own minimum (13.0). Recent Xcode
-    # versions refuse any deployment target below 15.0, so pin every pod here
-    # instead of patching each plugin.
+    # Flutter stamps plugin podspecs with its own minimum (13.0) and some
+    # plugins still declare 9.0. Recent Xcode versions refuse any deployment
+    # target below 15.0, so pin every pod here instead of patching plugins.
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
+    pinned << target.name
   end
+
+  puts "[vietvoice] pinned iOS 15.0 on #{pinned.length} pod targets: #{pinned.sort.join(', ')}"
 end
