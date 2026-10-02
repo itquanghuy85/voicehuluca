@@ -106,6 +106,37 @@ flutter run -d <device-id>
 flutter run --debug
 ```
 
+### Building for iOS (macOS required)
+
+Minimum deployment target is **iOS 15.0**, already set in
+`ios/Runner.xcodeproj` and pinned by `platform :ios, '15.0'` in `ios/Podfile`.
+
+```bash
+# On a Mac with Xcode and CocoaPods installed
+flutter pub get
+flutter build ios --debug --no-codesign      # simulator / unsigned build
+flutter build ipa --no-codesign              # archive without signing
+open ios/Runner.xcworkspace                  # then pick your Team to run on a device
+```
+
+Notes:
+
+- Use the **workspace** (`Runner.xcworkspace`), not the project, or the pods
+  are not compiled.
+- Set your signing team once: Xcode → *Runner* → *Signing & Capabilities*.
+- The microphone permission text lives in `ios/Runner/Info.plist`
+  (`NSMicrophoneUsageDescription`). Without it the app is rejected at runtime
+  when recording.
+- `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` are on, so
+  exported audio is reachable through Finder/Files. On iOS the app cannot write
+  to a public Downloads folder like Android does; it exports to its own
+  Documents folder.
+- Plain HTTP to a LAN backend (for example `http://192.168.1.20:3000/v1`) is
+  allowed through `NSAllowsLocalNetworking` in `Info.plist`. Add the address in
+  *Cài đặt → Máy chủ*, or let the LAN scan find it.
+- On the iOS simulator, `127.0.0.1` is the Mac itself, so a backend running on
+  the same Mac is reachable at `http://127.0.0.1:3000/v1`.
+
 ### Running the Backend
 
 The app can work in two modes:

@@ -26,6 +26,19 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VietVoice Studio cần quyền Micrô để ghi mẫu giọng của bạn và tạo giọng nói đọc kịch bản. Âm thanh chỉ được lưu trên máy của bạn.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Không dùng nhận dạng giọng nói. Quyền Micrô chỉ phục vụ việc ghi âm mẫu giọng.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
