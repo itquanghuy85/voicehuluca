@@ -302,6 +302,10 @@ class AppStrings {
   // Errors
   static const String errorNetwork =
       'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối và thử lại.';
+  /// The backend is self-hosted, so a failed call almost always means the
+  /// server is not running (or the address is wrong), not a device problem.
+  static const String errorBackendUnreachable =
+      'Không kết nối được máy chủ giọng nói. Kiểm tra backend đang chạy và địa chỉ trong Cài đặt → Kết nối dịch vụ.';
   static const String errorUnauthorized =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   static const String errorQuotaExceeded =

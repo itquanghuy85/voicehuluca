@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -45,11 +46,38 @@ class TtsRemoteDatasource {
     'x-vvt-api-key': apiKey,
   };
 
+  /// Turns transport failures into one typed error.
+  ///
+  /// The backend is a self-hosted proxy, so a refused connection, a wrong
+  /// address or a timeout all mean "the voice server is not answering" and must
+  /// not reach the UI as an unknown provider error.
+  Future<T> _guard<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on http.ClientException catch (error) {
+      throw _unreachable(error.message);
+    } on SocketException catch (error) {
+      throw _unreachable(error.message);
+    } on HandshakeException catch (error) {
+      throw _unreachable(error.message);
+    } on TimeoutException {
+      throw _unreachable('Yêu cầu quá thời gian.');
+    }
+  }
+
+  TtsProviderException _unreachable(String detail) => TtsProviderException(
+    'Máy chủ giọng nói không phản hồi: $detail',
+    kind: TtsErrorKind.network,
+    providerId: provider,
+  );
+
   Future<List<Voice>> getVoices() async {
     final uri = Uri.parse(
       '$baseUrl/voices',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _client.get(uri, headers: _headers);
+    final response = await _guard(
+      () => _client.get(uri, headers: _headers),
+    );
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -67,7 +95,9 @@ class TtsRemoteDatasource {
   /// Real availability per provider, as reported by the backend.
   Future<Map<String, bool>> getProviderAvailability() async {
     final uri = Uri.parse('$baseUrl/providers');
-    final response = await _client.get(uri, headers: _headers);
+    final response = await _guard(
+      () => _client.get(uri, headers: _headers),
+    );
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -110,10 +140,8 @@ class TtsRemoteDatasource {
     TtsOptions options = const TtsOptions(),
   }) async {
     final uri = Uri.parse('$baseUrl/tts');
-    final response = await _client.post(
-      uri,
-      headers: _headers,
-      body: jsonEncode({
+    final response = await _guard(
+      () => _client.post(uri, headers: _headers, body: jsonEncode({
         'provider': provider,
         'voiceId': voiceId,
         'text': text,
@@ -126,7 +154,7 @@ class TtsRemoteDatasource {
           if (options.modelId != null && options.modelId!.isNotEmpty)
             'modelId': options.modelId,
         },
-      }),
+      })),
     );
 
     if (response.statusCode != 200) {
@@ -205,7 +233,7 @@ class TtsRemoteDatasource {
       );
     }
 
-    final streamedResponse = await _client.send(request);
+    final streamedResponse = await _guard(() => _client.send(request));
 
     if (streamedResponse.statusCode != 200) {
       final body = await streamedResponse.stream.bytesToString();
@@ -239,7 +267,9 @@ class TtsRemoteDatasource {
     final uri = Uri.parse(
       '$baseUrl/voices/${Uri.encodeComponent(providerVoiceId)}',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _client.delete(uri, headers: _headers);
+    final response = await _guard(
+      () => _client.delete(uri, headers: _headers),
+    );
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -254,7 +284,9 @@ class TtsRemoteDatasource {
     final uri = Uri.parse(
       '$baseUrl/user/subscription',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _client.get(uri, headers: _headers);
+    final response = await _guard(
+      () => _client.get(uri, headers: _headers),
+    );
 
     if (response.statusCode != 200) {
       throw _toException(

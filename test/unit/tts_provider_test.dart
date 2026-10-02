@@ -572,7 +572,11 @@ void main() {
         mapTtsErrorKind(TtsErrorKind.unavailable),
         AppStrings.errorProviderUnavailable,
       );
-      expect(mapTtsErrorKind(TtsErrorKind.network), AppStrings.errorNetwork);
+      expect(
+        mapTtsErrorKind(TtsErrorKind.network),
+        AppStrings.errorBackendUnreachable,
+        reason: 'the app only talks to its own backend, so say the server is down',
+      );
     });
   });
 

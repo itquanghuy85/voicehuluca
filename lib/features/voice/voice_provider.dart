@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -387,23 +388,28 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
   void setSearchQuery(String query) {
     state = state.copyWith(searchQuery: query);
   }
+}
 
-  String mapError(Object error) {
-    if (error is SocketException) {
-      return AppStrings.errorNetwork;
-    }
-    if (error is TtsProviderException) {
-      return mapTtsErrorKind(error.kind);
-    }
-    return AppStrings.errorUnknown;
+/// Voice-list failures in the user's language.
+String mapError(Object error) {
+  if (error is TtsProviderException) {
+    return mapTtsErrorKind(error.kind);
   }
+  // A transport error that reached this far still means the voice server is
+  // unreachable, so say that instead of a generic failure.
+  if (error is SocketException ||
+      error is http.ClientException ||
+      error is TimeoutException) {
+    return AppStrings.errorBackendUnreachable;
+  }
+  return AppStrings.errorUnknown;
 }
 
 /// Single mapping from provider error kind to user-facing text.
 String mapTtsErrorKind(TtsErrorKind kind) {
   switch (kind) {
     case TtsErrorKind.network:
-      return AppStrings.errorNetwork;
+      return AppStrings.errorBackendUnreachable;
     case TtsErrorKind.unauthorized:
       return AppStrings.errorUnauthorized;
     case TtsErrorKind.paymentRequired:

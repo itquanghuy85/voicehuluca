@@ -7,15 +7,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/remote/tts_remote_datasource.dart';
 import 'package:voice_huluca/data/repositories/tts_repository_impl.dart';
-import 'package:voice_huluca/data/services/tts_provider.dart';
+import 'package:voice_huluca/data/services/tts_provider.dart'
+    show TtsErrorKind, TtsProviderException, TtsProviderIds;
 import 'package:voice_huluca/domain/entities/tts_request.dart';
 import 'package:voice_huluca/features/voice/voice_provider.dart'
     show
+        mapError,
         ttsProviderIdProvider,
         httpClientFactoryProvider,
         voiceListProvider;
@@ -558,6 +561,74 @@ void main() {
         state.voices.firstWhere((v) => v.id == state.selectedVoiceId)
             .providerVoiceId,
         'vi-VN-NamMinhNeural',
+      );
+    });
+  });
+
+  group('An unreachable backend is reported as such', () {
+    test('a refused connection becomes a network kind error', () async {
+      final repository = _repository(
+        db,
+        MockClient(
+          (_) async => throw const SocketException('Connection refused'),
+        ),
+      );
+
+      await expectLater(
+        repository.getVoices(forceRefresh: true),
+        throwsA(
+          isA<TtsProviderException>().having(
+            (error) => error.kind,
+            'kind',
+            TtsErrorKind.network,
+          ),
+        ),
+      );
+    });
+
+    test('the voice list explains the backend instead of saying "unknown"', () async {
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          httpClientFactoryProvider.overrideWithValue(
+            () => MockClient(
+              (_) async => throw const SocketException('Connection refused'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(voiceListProvider, (_, _) {});
+      addTearDown(subscription.close);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      final state = container.read(voiceListProvider);
+      expect(state.voices, isEmpty);
+      expect(state.error, AppStrings.errorBackendUnreachable);
+    });
+
+    test('a raw socket error maps to the same guidance', () {
+      expect(
+        mapError(const SocketException('Connection refused')),
+        AppStrings.errorBackendUnreachable,
+      );
+      expect(
+        mapError(
+          const TtsProviderException(
+            'down',
+            kind: TtsErrorKind.network,
+          ),
+        ),
+        AppStrings.errorBackendUnreachable,
+      );
+      expect(
+        mapError(
+          const TtsProviderException(
+            'boom',
+            kind: TtsErrorKind.server,
+          ),
+        ),
+        AppStrings.errorServer,
       );
     });
   });

@@ -412,11 +412,22 @@ class _HomeTabContent extends ConsumerWidget {
     }
 
     if (voiceState.error != null && voiceState.voices.isEmpty) {
+      // The notifier already mapped the failure, so the user sees whether the
+      // backend is down, the key is wrong or it is a 5xx. That text is longer
+      // than one line, so this block grows instead of clipping it.
       return Container(
-        height: AppSizes.touchTargetLarge,
-        alignment: Alignment.center,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: colors.errorContainer,
+          borderRadius: AppRadius.mediumAll,
+          border: Border.all(color: colors.error.withValues(alpha: 0.35)),
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
               AppIcons.errorOutlined,
@@ -424,11 +435,13 @@ class _HomeTabContent extends ConsumerWidget {
               size: AppSizes.iconMedium,
             ),
             const SizedBox(width: AppSpacing.sm),
-            Text(
-              AppStrings.homeErrorLoadingVoices,
-              style: AppTypography.body.copyWith(color: colors.error),
+            Expanded(
+              child: Text(
+                voiceState.error!,
+                style: AppTypography.bodySmall.copyWith(color: colors.error),
+              ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: AppSpacing.xs),
             TextButton(
               onPressed: () =>
                   ref.read(voiceListProvider.notifier).loadVoices(),
