@@ -114,9 +114,18 @@ Minimum deployment target is **iOS 15.0**, already set in
 ```bash
 # On a Mac with Xcode and CocoaPods installed
 flutter pub get
+cd ios && pod install && cd ..    # Podfile pins iOS 15.0 for the app and every pod
 flutter build ios --debug --no-codesign      # simulator / unsigned build
 flutter build ipa --no-codesign              # archive without signing
 open ios/Runner.xcworkspace                  # then pick your Team to run on a device
+```
+
+If the pods were installed before, clear them once so the `post_install` hook
+that pins every pod to iOS 15.0 takes effect:
+
+```bash
+flutter clean
+cd ios && rm -rf Pods Podfile.lock && pod install && cd ..
 ```
 
 Notes:

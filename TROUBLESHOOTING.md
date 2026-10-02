@@ -53,8 +53,11 @@ flutter pub run build_runner build --delete-conflicting-outputs
 | `CocoaPods not installed` | `sudo gem install cocoapods` |
 | `Pod install failed` | `cd ios && pod deintegrate && pod install` |
 | `Signing error` | Open Xcode → Select Team → Enable "Automatically manage signing" |
-| `Minimum iOS version` | Set `platform :ios, '13.0'` in `ios/Podfile` |
+| `The iOS deployment target is set to 13.0, but the range of supported deployment target versions is 15.0 …` (one per pod) | Flutter stamps plugin podspecs with its own 13.0 minimum. The `post_install` hook in `ios/Podfile` forces every pod to 15.0 — reinstall the pods so it applies |
+| `Minimum iOS version` | Keep `platform :ios, '15.0'` in `ios/Podfile`; do not lower it |
 | `Xcode not found` | `sudo xcode-select --switch /Applications/Xcode.app` |
+| Build succeeds but nothing plays/records on a device | Check `NSMicrophoneUsageDescription` in `ios/Runner/Info.plist` |
+| Plain HTTP to a LAN backend is blocked | `NSAllowsLocalNetworking` must be `true` in `ios/Runner/Info.plist` |
 
 ```bash
 # Full iOS clean build
@@ -65,6 +68,10 @@ pod install
 cd ..
 flutter build ios --release
 ```
+
+If the deployment target errors persist after `pod install`, the cached pod
+projects are stale. Delete `ios/Pods` **and** the `Pods` group inside
+`ios/Runner.xcworkspace`, then run `pod install` again.
 
 ### Android Build Issues
 
