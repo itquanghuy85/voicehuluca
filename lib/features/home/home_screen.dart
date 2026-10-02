@@ -858,6 +858,7 @@ class _HomeTabContent extends ConsumerWidget {
           text: scriptText.trim(),
           voiceId: voiceId,
           voiceName: voiceName,
+          localVoiceId: voice.id,
           speed: speed,
         );
   }

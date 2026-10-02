@@ -36,6 +36,9 @@ class GenerationState {
   final String text;
   final String voiceId;
   final String voiceName;
+
+  /// Local database id of the voice used, so the library can show its name.
+  final int? localVoiceId;
   final double speed;
   final double progress;
   final String? errorMessage;
@@ -53,6 +56,7 @@ class GenerationState {
     this.text = '',
     this.voiceId = '',
     this.voiceName = '',
+    this.localVoiceId,
     this.speed = 1.0,
     this.progress = 0.0,
     this.errorMessage,
@@ -105,6 +109,7 @@ class GenerationState {
     String? text,
     String? voiceId,
     String? voiceName,
+    int? localVoiceId,
     double? speed,
     double? progress,
     String? errorMessage,
@@ -122,6 +127,7 @@ class GenerationState {
       text: text ?? this.text,
       voiceId: voiceId ?? this.voiceId,
       voiceName: voiceName ?? this.voiceName,
+      localVoiceId: localVoiceId ?? this.localVoiceId,
       speed: speed ?? this.speed,
       progress: progress ?? this.progress,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -185,6 +191,10 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
   StreamSubscription<TtsResponse>? _subscription;
   Timer? _timeoutTimer;
 
+  /// True while the final response is being written to disk and stored, so the
+  /// stream's onDone does not report a false failure.
+  bool _isCompleting = false;
+
   GenerationNotifier(
     this._synthesize,
     this._audioRepository, {
@@ -217,6 +227,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     required String text,
     required String voiceId,
     required String voiceName,
+    int? localVoiceId,
     double speed = 1.0,
   }) async {
     if (state.isBusy) return;
@@ -250,6 +261,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       text: trimmed,
       voiceId: voiceId,
       voiceName: voiceName,
+      localVoiceId: localVoiceId ?? int.tryParse(voiceId),
       speed: speed,
       progress: 0.0,
       clearError: true,
@@ -282,7 +294,10 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
         _handleResponse,
         onError: _handleError,
         onDone: () {
-          if (state.isBusy) {
+          // The final "completed" event starts an async save (write file, read
+          // duration, insert row). Until that finishes the state is still
+          // busy, so report an error only when nothing is in flight.
+          if (state.isBusy && !_isCompleting) {
             state = state.copyWith(
               status: GenerationStatus.error,
               errorMessage: AppStrings.errorUnknown,
@@ -334,9 +349,32 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     }
   }
 
+  /// Builds a readable library title: the first words of the script, falling
+  /// back to the voice name so the user never sees `voice_<timestamp>`.
+  String _buildTitle() {
+    final text = state.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (text.isNotEmpty) {
+      if (text.length <= 40) return text;
+      final cut = text.substring(0, 40);
+      final lastSpace = cut.lastIndexOf(' ');
+      return '${lastSpace > 20 ? cut.substring(0, lastSpace) : cut}…';
+    }
+    final voice = state.voiceName.trim();
+    return voice.isEmpty ? AppStrings.homeNewAudio : voice;
+  }
+
   Future<void> _completeGeneration(TtsResponse response) async {
     _timeoutTimer?.cancel();
+    _isCompleting = true;
 
+    try {
+      await _saveCompletedGeneration(response);
+    } finally {
+      _isCompleting = false;
+    }
+  }
+
+  Future<void> _saveCompletedGeneration(TtsResponse response) async {
     final bytes = response.metadata?['audio'];
     if (bytes is! Uint8List || bytes.isEmpty) {
       state = state.copyWith(
@@ -369,8 +407,8 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     try {
       await _audioRepository.saveAudio(
         projectId: 0,
-        voiceId: int.tryParse(state.voiceId) ?? 0,
-        title: asset.fileName,
+        voiceId: state.localVoiceId ?? 0,
+        title: _buildTitle(),
         filePath: asset.filePath,
         format: asset.format,
         durationMs: asset.duration.inMilliseconds,
@@ -403,12 +441,14 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
     final text = state.text;
     final voiceId = state.voiceId;
     final voiceName = state.voiceName;
+    final localVoiceId = state.localVoiceId;
     final speed = state.speed;
-    state = GenerationState();
+    state = const GenerationState();
     await startGeneration(
       text: text,
       voiceId: voiceId,
       voiceName: voiceName,
+      localVoiceId: localVoiceId,
       speed: speed,
     );
   }
@@ -418,6 +458,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
   Future<void> retryGenerationWithVoice({
     required String voiceId,
     required String voiceName,
+    int? localVoiceId,
   }) async {
     if (state.isBusy) return;
     final text = state.text;
@@ -427,6 +468,7 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       text: text,
       voiceId: voiceId,
       voiceName: voiceName,
+      localVoiceId: localVoiceId,
       speed: speed,
     );
   }
@@ -509,6 +551,13 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       return AppStrings.errorNetwork;
     }
     if (error is TtsProviderException) {
+      // The local provider shells out to Microsoft Edge TTS, which rate limits
+      // aggressively. Say so instead of showing a generic server error.
+      if (_activeProviderId() == TtsProviderIds.local &&
+          (error.kind == TtsErrorKind.server ||
+              error.kind == TtsErrorKind.unavailable)) {
+        return AppStrings.errorEdgeUnavailable;
+      }
       return mapTtsErrorKind(error.kind);
     }
     return AppStrings.errorUnknown;

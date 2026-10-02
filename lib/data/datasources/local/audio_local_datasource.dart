@@ -113,12 +113,11 @@ class AudioLocalDataSource {
     final audio = await _database.getAudioAsset(audioId);
     if (audio == null) return false;
     final updated = _toAudioAsset(audio).copyWith(isFavorite: isFavorite);
-    return _database.updateAudioAsset(
-      AudioAssetsCompanion(
-        id: Value(updated.id),
-        isFavorite: Value(updated.isFavorite),
-      ),
+    final rows = await _database.updateAudioFavorite(
+      updated.id,
+      updated.isFavorite,
     );
+    return rows > 0;
   }
 
   Future<String?> getAudioFilePath(int audioId) async {

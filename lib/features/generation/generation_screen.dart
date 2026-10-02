@@ -58,21 +58,20 @@ class GenerationScreen extends ConsumerWidget {
 
     final registry = ref.read(ttsProviderRegistryProvider);
     final fallbackName = registry.getById(fallbackId)?.name ?? fallbackId;
+    final currentName =
+        registry.getById(ref.read(ttsProviderIdProvider))?.name ?? fallbackId;
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text(AppStrings.providerFallbackTitle),
+        title: Text(AppStrings.providerFallbackTitleFor(fallbackName)),
         content: Text(
-          AppStrings.providerFallbackDesc.replaceFirst(
-            '{provider}',
-            fallbackName,
-          ),
+          AppStrings.providerFallbackDescFor(currentName, fallbackName),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(AppStrings.providerFallbackStay),
+            child: Text(AppStrings.providerFallbackStay(currentName)),
           ),
           TextButton(
             onPressed: () async {
@@ -91,6 +90,7 @@ class GenerationScreen extends ConsumerWidget {
               await notifier.retryGenerationWithVoice(
                 voiceId: voice.providerVoiceId,
                 voiceName: voice.name,
+                localVoiceId: voice.id,
               );
             },
             style: TextButton.styleFrom(

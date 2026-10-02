@@ -75,9 +75,7 @@ class TtsRemoteDatasource {
     final uri = Uri.parse(
       '$baseUrl/voices',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _guard(
-      () => _client.get(uri, headers: _headers),
-    );
+    final response = await _guard(() => _client.get(uri, headers: _headers));
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -95,9 +93,7 @@ class TtsRemoteDatasource {
   /// Real availability per provider, as reported by the backend.
   Future<Map<String, bool>> getProviderAvailability() async {
     final uri = Uri.parse('$baseUrl/providers');
-    final response = await _guard(
-      () => _client.get(uri, headers: _headers),
-    );
+    final response = await _guard(() => _client.get(uri, headers: _headers));
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -141,20 +137,24 @@ class TtsRemoteDatasource {
   }) async {
     final uri = Uri.parse('$baseUrl/tts');
     final response = await _guard(
-      () => _client.post(uri, headers: _headers, body: jsonEncode({
-        'provider': provider,
-        'voiceId': voiceId,
-        'text': text,
-        'options': {
-          'speed': options.speed,
-          'stability': options.stability,
-          'similarityBoost': options.similarityBoost,
-          'style': options.style,
-          'useSpeakerBoost': options.useSpeakerBoost,
-          if (options.modelId != null && options.modelId!.isNotEmpty)
-            'modelId': options.modelId,
-        },
-      })),
+      () => _client.post(
+        uri,
+        headers: _headers,
+        body: jsonEncode({
+          'provider': provider,
+          'voiceId': voiceId,
+          'text': text,
+          'options': {
+            'speed': options.speed,
+            'stability': options.stability,
+            'similarityBoost': options.similarityBoost,
+            'style': options.style,
+            'useSpeakerBoost': options.useSpeakerBoost,
+            if (options.modelId != null && options.modelId!.isNotEmpty)
+              'modelId': options.modelId,
+          },
+        }),
+      ),
     );
 
     if (response.statusCode != 200) {
@@ -267,9 +267,7 @@ class TtsRemoteDatasource {
     final uri = Uri.parse(
       '$baseUrl/voices/${Uri.encodeComponent(providerVoiceId)}',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _guard(
-      () => _client.delete(uri, headers: _headers),
-    );
+    final response = await _guard(() => _client.delete(uri, headers: _headers));
 
     if (response.statusCode != 200) {
       throw _toException(
@@ -284,9 +282,7 @@ class TtsRemoteDatasource {
     final uri = Uri.parse(
       '$baseUrl/user/subscription',
     ).replace(queryParameters: {'provider': provider});
-    final response = await _guard(
-      () => _client.get(uri, headers: _headers),
-    );
+    final response = await _guard(() => _client.get(uri, headers: _headers));
 
     if (response.statusCode != 200) {
       throw _toException(

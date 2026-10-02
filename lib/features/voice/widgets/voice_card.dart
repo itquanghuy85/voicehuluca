@@ -144,7 +144,7 @@ class VoiceCard extends StatelessWidget {
         Text(
           voice.name,
           style: AppTypography.label.copyWith(color: scheme.textPrimary),
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
         if (voice.description != null && voice.description!.isNotEmpty) ...[

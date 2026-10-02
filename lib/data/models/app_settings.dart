@@ -21,6 +21,7 @@ class AppSettingsTable extends Table {
   IntColumn get warningThreshold =>
       integer().withDefault(const Constant(1000))();
   TextColumn get ttsProvider => text().withDefault(const Constant('google'))();
+
   /// Base URL of the VietVoice backend. Null means "use the compiled default".
   TextColumn get backendUrl => text().nullable()();
 }

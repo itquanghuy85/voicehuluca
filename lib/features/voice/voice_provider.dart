@@ -188,8 +188,9 @@ final httpClientFactoryProvider = Provider<http.Client Function()>((ref) {
 /// Stored in settings so one build works on any machine: the user either types
 /// an address or picks one found on the LAN. Null in storage means "use the
 /// address this build was compiled with".
-final backendUrlProvider =
-    NotifierProvider<BackendUrlNotifier, String>(BackendUrlNotifier.new);
+final backendUrlProvider = NotifierProvider<BackendUrlNotifier, String>(
+  BackendUrlNotifier.new,
+);
 
 class BackendUrlNotifier extends Notifier<String> {
   bool _disposed = false;

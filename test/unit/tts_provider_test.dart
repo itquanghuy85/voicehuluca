@@ -575,7 +575,8 @@ void main() {
       expect(
         mapTtsErrorKind(TtsErrorKind.network),
         AppStrings.errorBackendUnreachable,
-        reason: 'the app only talks to its own backend, so say the server is down',
+        reason:
+            'the app only talks to its own backend, so say the server is down',
       );
     });
   });

@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:voice_huluca/core/constants/app_constants.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
+import 'package:voice_huluca/core/storage/audio_export_service.dart';
 import 'package:voice_huluca/domain/entities/audio_asset.dart';
 import 'package:voice_huluca/features/generation/generation_provider.dart';
 
@@ -861,13 +862,10 @@ class _DownloadButton extends ConsumerWidget {
     );
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await getTemporaryDirectory();
       final fileName = p.basenameWithoutExtension(asset.fileName);
-      final targetPath = p.join(
-        directory.path,
-        'vietvoice_downloads',
-        '$fileName.$format',
-      );
+      final exportName = '$fileName.$format';
+      final targetPath = p.join(directory.path, exportName);
       final targetFile = File(targetPath);
       await targetFile.parent.create(recursive: true);
 
@@ -886,10 +884,15 @@ class _DownloadButton extends ConsumerWidget {
         }
       }
 
+      final saved = await AudioExportService.exportToDownloads(
+        sourcePath: targetPath,
+        fileName: exportName,
+      );
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(AppStrings.resultDownloadComplete),
+            content: Text(AppStrings.resultSavedTo(saved.location)),
             duration: AppConstants.snackBarDuration,
             backgroundColor: colors.success,
           ),
@@ -955,13 +958,10 @@ class _SecondaryActions extends ConsumerWidget {
     );
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await getTemporaryDirectory();
       final fileName = p.basenameWithoutExtension(asset.fileName);
-      final targetPath = p.join(
-        directory.path,
-        'vietvoice_downloads',
-        '$fileName.wav',
-      );
+      final exportName = '$fileName.wav';
+      final targetPath = p.join(directory.path, exportName);
       final targetFile = File(targetPath);
       await targetFile.parent.create(recursive: true);
 
@@ -977,10 +977,15 @@ class _SecondaryActions extends ConsumerWidget {
         }
       }
 
+      final saved = await AudioExportService.exportToDownloads(
+        sourcePath: targetPath,
+        fileName: exportName,
+      );
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(AppStrings.resultDownloadComplete),
+            content: Text(AppStrings.resultSavedTo(saved.location)),
             duration: AppConstants.snackBarDuration,
             backgroundColor: colors.success,
           ),

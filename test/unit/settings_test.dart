@@ -192,8 +192,10 @@ void main() {
       expect((await datasource.getSettings()).backendUrl, isNull);
 
       await datasource.setBackendUrl('http://192.168.1.20:3000/v1');
-      expect((await datasource.getSettings()).backendUrl,
-          'http://192.168.1.20:3000/v1');
+      expect(
+        (await datasource.getSettings()).backendUrl,
+        'http://192.168.1.20:3000/v1',
+      );
 
       // Other settings must not be wiped by the write.
       await datasource.setTtsProvider('local');

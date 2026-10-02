@@ -137,27 +137,72 @@ class _FilterChips extends StatelessWidget {
       (VoiceFilter.female, AppStrings.voiceSelectorFilterFemale),
       (VoiceFilter.favorites, AppStrings.voiceSelectorFilterFavorites),
     ];
-    return SizedBox(
-      height: AppSizes.touchTarget,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        itemCount: filters.length,
-        separatorBuilder: (context, index) =>
-            const SizedBox(width: AppSpacing.sm),
-        itemBuilder: (context, index) {
-          final (filter, label) = filters[index];
-          return ChoiceChip(
-            label: Text(label),
-            selected: selected == filter,
-            onSelected: (_) => onSelected(filter),
-            labelStyle: AppTypography.bodySmall.copyWith(
-              color: selected == filter
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : AppColorScheme.of(Theme.of(context).brightness).textPrimary,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          for (final (filter, label) in filters)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: _FilterPill(
+                label: label,
+                selected: selected == filter,
+                onTap: () => onSelected(filter),
+              ),
             ),
-          );
-        },
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = AppColorScheme.of(Theme.of(context).brightness);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primary : scheme.surface,
+            borderRadius: AppRadius.pillAll,
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.divider,
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: AppTypography.bodySmall.copyWith(
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              color: selected ? scheme.onPrimary : scheme.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }

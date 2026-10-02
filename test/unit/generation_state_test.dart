@@ -9,6 +9,7 @@ void main() {
       expect(state.text, '');
       expect(state.voiceId, '');
       expect(state.voiceName, '');
+      expect(state.localVoiceId, isNull);
       expect(state.speed, 1.0);
       expect(state.progress, 0.0);
       expect(state.errorMessage, isNull);
@@ -16,6 +17,18 @@ void main() {
       expect(state.ttsRequestId, isNull);
       expect(state.startedAt, isNull);
       expect(state.completedAt, isNull);
+    });
+
+    test('keeps the local voice id through copyWith', () {
+      final state = const GenerationState().copyWith(
+        voiceId: 'ar-MA-voice',
+        voiceName: 'Edge Mouna',
+        localVoiceId: 7,
+      );
+
+      expect(state.localVoiceId, 7);
+      expect(state.copyWith(speed: 1.25).localVoiceId, 7);
+      expect(const GenerationState().copyWith().localVoiceId, isNull);
     });
 
     test('isBusy returns true for validating status', () {

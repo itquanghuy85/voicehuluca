@@ -57,6 +57,7 @@ class AppStrings {
   static const String voiceSelectorFilterFemale = 'Nữ';
   static const String voiceSelectorFilterMale = 'Nam';
   static const String voiceSelectorFilterCloned = 'Giọng nhân bản';
+
   /// Short badge label for the voice card, where the row is already narrow.
   static const String voiceSelectorClonedBadge = 'Nhân bản';
   static const String voiceSelectorFilterMine = 'Giọng của tôi';
@@ -208,6 +209,7 @@ class AppStrings {
   static const String resultShareSuccess = 'Đã chia sẻ tệp âm thanh';
   static const String resultDownloadStarted = 'Đã bắt đầu tải xuống';
   static const String resultDownloadComplete = 'Tải xuống hoàn tất';
+  static String resultSavedTo(String location) => 'Đã lưu vào $location';
   static const String resultPlaybackError = 'Không thể phát âm thanh';
 
   // Segment Editor
@@ -305,7 +307,8 @@ class AppStrings {
   static const String settingsLogout = 'Đăng xuất';
   static const String settingsLogoutConfirm = 'Bạn có chắc muốn đăng xuất?';
   // Backend address (LAN)
-  static const String settingsBackendTitle = 'Máy chủ giọng nói';  static const String settingsBackendDesc =
+  static const String settingsBackendTitle = 'Máy chủ giọng nói';
+  static const String settingsBackendDesc =
       'Địa chỉ máy đang chạy backend. Gõ IP của máy đó, hoặc bấm "Dò trong mạng LAN" để app tự tìm.';
   static const String settingsBackendUrlLabel = 'Địa chỉ máy chủ';
   static const String settingsBackendUrlHint = '192.168.1.20:3000';
@@ -338,6 +341,7 @@ class AppStrings {
   // Errors
   static const String errorNetwork =
       'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối và thử lại.';
+
   /// The backend is self-hosted, so a failed call almost always means the
   /// server is not running (or the address is wrong), not a device problem.
   static const String errorBackendUnreachable =
@@ -349,6 +353,8 @@ class AppStrings {
   static const String errorTimeout = 'Yêu cầu quá thời gian. Vui lòng thử lại.';
   static const String errorProviderUnavailable =
       'Dịch vụ tạm thời gián đoạn. Vui lòng thử lại sau.';
+  static const String errorEdgeUnavailable =
+      'Microsoft Edge TTS đang tạm thời không phản hồi (thường do bị giới hạn tần suất). Hãy thử lại sau vài giây, đổi giọng khác hoặc dùng ElevenLabs.';
   static const String errorInvalidAudio =
       'Tệp âm thanh không hợp lệ hoặc bị hỏng.';
   static const String errorCloningFailed =
@@ -2007,8 +2013,20 @@ class AppStrings {
   static const String libraryFavoriteRemoved = 'Đã bỏ yêu thích';
   static const String libraryShareTitle = 'Chia sẻ audio';
   static const String libraryExportSuccess = 'Đã xuất audio';
+  static String libraryExportedTo(String location) => 'Đã xuất vào $location';
+  static const String libraryFavoriteFailed = 'Không lưu được yêu thích';
+  static const String libraryExportFailed = 'Không xuất được audio';
+  static const String libraryEmptyFavorites = 'Chưa có audio yêu thích';
+  static const String libraryEmptyFavoritesHint =
+      'Bấm vào ⋮ trên một audio để thêm vào yêu thích.';
+  static const String libraryNoSearchResult = 'Không tìm thấy audio';
+  static const String homeNewAudio = 'Audio mới';
+  static const String libraryNoSearchResultHint =
+      'Thử một từ khoá khác hoặc xoá bộ lọc.';
   static const String libraryLoadingMore = 'Đang tải thêm...';
   static const String libraryLoadMore = 'Tải thêm';
+  static const String libraryPlay = 'Phát audio';
+  static const String libraryPause = 'Tạm dừng audio';
   static const String libraryVoiceUnknown = 'Không xác định';
 
   // Audio Detail Screen
@@ -2144,10 +2162,12 @@ class AppStrings {
   static const String providerCloningUnavailableDesc =
       'Google TTS không có tính năng nhân bản giọng nói. Hãy chuyển sang ElevenLabs trong Cài đặt nếu bạn cần tính năng này. Ứng dụng không tạo dữ liệu giả.';
   static const String providerSwitchAction = 'Chuyển sang ElevenLabs';
-  static const String providerFallbackTitle = 'Chuyển sang ElevenLabs?';
-  static const String providerFallbackDesc =
-      'Google TTS không tạo được âm thanh. Bạn có muốn thử lại bằng ElevenLabs không? ElevenLabs có thể phát sinh phí theo gói của bạn.';
-  static const String providerFallbackStay = 'Giữ Google TTS';
+  static const String providerFallbackTitle = 'Chuyển sang {fallback}?';
+  static String providerFallbackTitleFor(String fallback) =>
+      'Chuyển sang $fallback?';
+  static String providerFallbackDescFor(String current, String fallback) =>
+      '$current không tạo được âm thanh. Bạn có muốn thử lại bằng $fallback không? $fallback có thể phát sinh phí theo gói của bạn.';
+  static String providerFallbackStay(String current) => 'Giữ $current';
   static const String providerFallbackAccept = 'Chuyển & thử lại';
   static const String providerSwitchedToFallback =
       'Đã chuyển sang ElevenLabs. Đang thử lại...';
@@ -2184,6 +2204,9 @@ class AppStrings {
   static const String recordVoiceNameRequired =
       'Vui lòng đặt tên cho giọng mới.';
   static const String recordVoicePermission = 'Cần quyền thu âm để tạo giọng.';
+  static const String recordVoicePermissionHint =
+      'VietVoice cần quyền Micrô để ghi mẫu giọng. Bấm nút bên dưới để mở Cài đặt và chọn "Chỉ cho phép khi đang dùng ứng dụng".';
+  static const String recordVoiceOpenSettings = 'Mở cài đặt quyền';
   static const String recordVoiceSaved = 'Đã lưu giọng mới';
   static const String recordVoiceFailed =
       'Không tạo được giọng mới. Vui lòng thử lại.';

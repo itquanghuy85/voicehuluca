@@ -129,13 +129,19 @@ abstract final class AppTheme {
         labelColor: colorScheme.primary,
         unselectedLabelColor: colorScheme.textSecondary,
         indicatorColor: colorScheme.primary,
-        labelStyle: AppTypography.label,
-        unselectedLabelStyle: AppTypography.body,
+        labelStyle: AppTypography.label.copyWith(
+          color: colorScheme.textPrimary,
+        ),
+        unselectedLabelStyle: AppTypography.body.copyWith(
+          color: colorScheme.textSecondary,
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surface,
         selectedColor: colorScheme.primary,
-        labelStyle: AppTypography.bodySmall,
+        labelStyle: AppTypography.bodySmall.copyWith(
+          color: colorScheme.textPrimary,
+        ),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
           vertical: AppSpacing.xs,
@@ -156,8 +162,12 @@ abstract final class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.largeAll),
-        titleTextStyle: AppTypography.title,
-        contentTextStyle: AppTypography.body,
+        titleTextStyle: AppTypography.title.copyWith(
+          color: colorScheme.textPrimary,
+        ),
+        contentTextStyle: AppTypography.body.copyWith(
+          color: colorScheme.textSecondary,
+        ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colorScheme.surface,

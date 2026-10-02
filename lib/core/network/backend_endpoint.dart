@@ -41,7 +41,10 @@ class BackendEndpoint {
     final path = _normalisePath(parsed.path);
     final port = parsed.hasPort ? ':${parsed.port}' : '';
     final host = parsed.host.contains(':') ? '[${parsed.host}]' : parsed.host;
-    return (url: 'http${parsed.scheme == 'https' ? 's' : ''}://$host$port$path', message: null);
+    return (
+      url: 'http${parsed.scheme == 'https' ? 's' : ''}://$host$port$path',
+      message: null,
+    );
   }
 
   /// Convenience for callers that only need the URL or the compiled default.

@@ -183,6 +183,40 @@ void main() {
       notifier.dispose();
     });
 
+    test(
+      'a slow save is not reported as a failure when the stream ends',
+      () async {
+        // Regression: onDone used to overwrite the success state while the file
+        // was still being written, so a finished generation showed an error.
+        final notifier = buildNotifier(
+          isOffline: false,
+          activeProvider: TtsProviderIds.google,
+          onSynthesize: () async {},
+          writeAudio: (bytes, fileName) async {
+            await Future<void>.delayed(const Duration(milliseconds: 120));
+            return '/tmp/$fileName';
+          },
+          readDuration: (_) async => const Duration(seconds: 3),
+        );
+
+        await notifier.startGeneration(
+          text: 'Xin chào các bạn',
+          voiceId: 'google-vi-standard',
+          voiceName: 'Google Tiếng Việt',
+        );
+
+        // Right after the stream closes the save is still running.
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(notifier.state.errorMessage, isNull);
+
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        expect(notifier.state.status, GenerationStatus.success);
+        expect(notifier.state.errorMessage, isNull);
+        expect(notifier.state.audioAsset, isNotNull);
+        notifier.dispose();
+      },
+    );
+
     test('writes the real audio bytes to disk', () async {
       Uint8List? written;
       final notifier = buildNotifier(
@@ -329,6 +363,60 @@ void main() {
 
         notifier.clearFallbackSuggestion();
         expect(notifier.state.fallbackProviderId, isNull);
+        notifier.dispose();
+      });
+
+      test(
+        'an Edge rate limit explains itself instead of saying "server"',
+        () async {
+          final notifier = buildNotifier(
+            isOffline: false,
+            activeProvider: TtsProviderIds.local,
+            onSynthesize: () async => throw TtsProviderException(
+              'No audio was received',
+              statusCode: 502,
+              kind: TtsErrorKind.unavailable,
+              providerId: TtsProviderIds.local,
+            ),
+          );
+
+          await notifier.startGeneration(
+            text: 'Kịch bản',
+            voiceId: 'vi-VN-NamMinhNeural',
+            voiceName: 'Edge NamMinh',
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+
+          expect(notifier.state.status, GenerationStatus.error);
+          expect(notifier.state.errorMessage, AppStrings.errorEdgeUnavailable);
+          expect(notifier.state.errorMessage, isNot(AppStrings.errorServer));
+          notifier.dispose();
+        },
+      );
+
+      test('other providers keep their own error message', () async {
+        final notifier = buildNotifier(
+          isOffline: false,
+          activeProvider: TtsProviderIds.google,
+          onSynthesize: () async => throw TtsProviderException(
+            'boom',
+            statusCode: 502,
+            kind: TtsErrorKind.unavailable,
+            providerId: TtsProviderIds.google,
+          ),
+        );
+
+        await notifier.startGeneration(
+          text: 'Kịch bản',
+          voiceId: 'google-vi-standard',
+          voiceName: 'Google',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(
+          notifier.state.errorMessage,
+          AppStrings.errorProviderUnavailable,
+        );
         notifier.dispose();
       });
     },

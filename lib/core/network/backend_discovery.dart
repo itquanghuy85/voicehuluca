@@ -66,7 +66,10 @@ class LanBackendScanner {
         includeLoopback: false,
       );
       return interfaces
-          .where((iface) => iface.name.startsWith('wlan') || iface.name.startsWith('wi-fi'))
+          .where(
+            (iface) =>
+                iface.name.startsWith('wlan') || iface.name.startsWith('wi-fi'),
+          )
           .expand((iface) => iface.addresses)
           .map((address) => address.address)
           .where(isPrivate)
@@ -87,9 +90,7 @@ class LanBackendScanner {
   static List<String> neighboursOf(String address) {
     final subnet = subnetOf(address);
     if (subnet == null) return const [];
-    return [
-      for (var host = 1; host <= 254; host++) '$subnet.$host',
-    ];
+    return [for (var host = 1; host <= 254; host++) '$subnet.$host'];
   }
 
   /// Runs [probe] over the local subnet and returns what answered, fastest
@@ -170,13 +171,17 @@ class LanBackendScanner {
       if (response.statusCode != 200) {
         return null;
       }
-      final body = await response.transform(const SystemEncoding().decoder).join();
+      final body = await response
+          .transform(const SystemEncoding().decoder)
+          .join();
       stopwatch.stop();
       // The signature keeps the scanner from reporting random web servers.
       if (!body.contains('vietvoice-backend')) {
         return null;
       }
-      return stopwatch.elapsedMilliseconds == 0 ? 1 : stopwatch.elapsedMilliseconds;
+      return stopwatch.elapsedMilliseconds == 0
+          ? 1
+          : stopwatch.elapsedMilliseconds;
     } on Object {
       return null;
     } finally {

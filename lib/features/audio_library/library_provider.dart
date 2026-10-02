@@ -11,6 +11,14 @@ extension AudioRepositoryImplExt on AudioRepositoryImpl {
 
 enum LibraryFilter { all, recent, favorites }
 
+/// Maps a voice id to its display name so the library can show which voice was
+/// used for each audio instead of a placeholder.
+final libraryVoiceNamesProvider = FutureProvider<Map<int, String>>((ref) async {
+  final database = ref.watch(appDatabaseProvider);
+  final voices = await database.getAllVoices();
+  return {for (final voice in voices) voice.id: voice.name};
+});
+
 class LibraryState {
   final List<AudioAsset> audios;
   final LibraryFilter filter;
@@ -61,6 +69,30 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
   LibraryNotifier(this._repository) : super(const LibraryState());
 
   static const int _pageSize = 20;
+  static const Duration _recentWindow = Duration(days: 7);
+
+  /// Loads the list for the active filter, newest first, so the audio the user
+  /// just made is always at the top.
+  Future<List<AudioAsset>> _fetchAudios() async {
+    final audios = state.searchQuery.isNotEmpty
+        ? await _repository.searchAudio(state.searchQuery)
+        : switch (state.filter) {
+            LibraryFilter.all => await _repository.getAllAudio(),
+            LibraryFilter.favorites => await _repository.getFavoriteAudio(),
+            LibraryFilter.recent =>
+              (await _repository.getAllAudio())
+                  .where(
+                    (a) => a.createdAt.isAfter(
+                      DateTime.now().subtract(_recentWindow),
+                    ),
+                  )
+                  .toList(),
+          };
+
+    final sorted = List<AudioAsset>.of(audios)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sorted;
+  }
 
   Future<void> loadLibrary({bool refresh = false}) async {
     if (state.isLoading) return;
@@ -78,23 +110,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
     }
 
     try {
-      List<AudioAsset> audios = [];
-      if (state.searchQuery.isNotEmpty) {
-        audios = await _repository.searchAudio(state.searchQuery);
-      } else {
-        switch (state.filter) {
-          case LibraryFilter.all:
-            audios = await _repository.getAllAudio();
-            break;
-          case LibraryFilter.favorites:
-            audios = await _repository.getFavoriteAudio();
-            break;
-          case LibraryFilter.recent:
-            audios = await _repository.getAllAudio();
-            audios.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-            break;
-        }
-      }
+      final audios = await _fetchAudios();
 
       final paginated = audios.take(_pageSize).toList();
       state = state.copyWith(
@@ -115,23 +131,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
     state = state.copyWith(isLoadingMore: true);
 
     try {
-      List<AudioAsset> audios = [];
-      if (state.searchQuery.isNotEmpty) {
-        audios = await _repository.searchAudio(state.searchQuery);
-      } else {
-        switch (state.filter) {
-          case LibraryFilter.all:
-            audios = await _repository.getAllAudio();
-            break;
-          case LibraryFilter.favorites:
-            audios = await _repository.getFavoriteAudio();
-            break;
-          case LibraryFilter.recent:
-            audios = await _repository.getAllAudio();
-            audios.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-            break;
-        }
-      }
+      final audios = await _fetchAudios();
 
       final startIndex = state.currentPage * _pageSize;
       final endIndex = startIndex + _pageSize;
@@ -172,18 +172,25 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
     }
   }
 
-  Future<void> toggleFavorite(int id) async {
+  Future<bool> toggleFavorite(int id) async {
     try {
       final audio = state.audios.firstWhere((a) => a.id == id);
       final newFavorite = !audio.isFavorite;
-      await _repository.toggleFavorite(id, newFavorite);
+      final ok = await _repository.toggleFavorite(id, newFavorite);
+      if (!ok) {
+        state = state.copyWith(error: 'toggleFavorite failed for audio $id');
+        return false;
+      }
       state = state.copyWith(
+        error: null,
         audios: state.audios
             .map((a) => a.id == id ? a.copyWith(isFavorite: newFavorite) : a)
             .toList(),
       );
+      return true;
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      return false;
     }
   }
 

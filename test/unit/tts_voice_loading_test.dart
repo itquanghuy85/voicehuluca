@@ -471,98 +471,106 @@ void main() {
       expect(state.voices.single.providerVoiceId, 'vi-VN-HoaiMyNeural');
     });
 
-    test('a fresh install picks a Vietnamese voice, not the first one', () async {
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          httpClientFactoryProvider.overrideWithValue(
-            () => MockClient(
-              (_) async => _json({
-                'provider': 'local',
-                'voices': [
-                  {
-                    'voice_id': 'af-ZA-WillemNeural',
-                    'name': 'Edge Willem (nam)',
-                    'category': 'premade',
-                    'labels': {'language': 'af-ZA', 'gender': 'male'},
-                  },
-                  {
-                    'voice_id': 'ja-JP-NanamiNeural',
-                    'name': 'Edge Nanami (nữ)',
-                    'category': 'premade',
-                    'labels': {'language': 'ja-JP', 'gender': 'female'},
-                  },
-                  {
-                    'voice_id': 'vi-VN-HoaiMyNeural',
-                    'name': 'Edge HoaiMy (nữ)',
-                    'category': 'premade',
-                    'labels': {'language': 'vi', 'gender': 'female'},
-                  },
-                ],
-              }, 200),
+    test(
+      'a fresh install picks a Vietnamese voice, not the first one',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            httpClientFactoryProvider.overrideWithValue(
+              () => MockClient(
+                (_) async => _json({
+                  'provider': 'local',
+                  'voices': [
+                    {
+                      'voice_id': 'af-ZA-WillemNeural',
+                      'name': 'Edge Willem (nam)',
+                      'category': 'premade',
+                      'labels': {'language': 'af-ZA', 'gender': 'male'},
+                    },
+                    {
+                      'voice_id': 'ja-JP-NanamiNeural',
+                      'name': 'Edge Nanami (nữ)',
+                      'category': 'premade',
+                      'labels': {'language': 'ja-JP', 'gender': 'female'},
+                    },
+                    {
+                      'voice_id': 'vi-VN-HoaiMyNeural',
+                      'name': 'Edge HoaiMy (nữ)',
+                      'category': 'premade',
+                      'labels': {'language': 'vi', 'gender': 'female'},
+                    },
+                  ],
+                }, 200),
+              ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      final subscription = container.listen(voiceListProvider, (_, _) {});
-      addTearDown(subscription.close);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+          ],
+        );
+        addTearDown(container.dispose);
+        final subscription = container.listen(voiceListProvider, (_, _) {});
+        addTearDown(subscription.close);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final state = container.read(voiceListProvider);
-      expect(
-        state.voices.where((v) => v.providerVoiceId == 'vi-VN-HoaiMyNeural'),
-        isNotEmpty,
-      );
-      expect(
-        state.voices.firstWhere((v) => v.id == state.selectedVoiceId)
-            .providerVoiceId,
-        'vi-VN-HoaiMyNeural',
-        reason: 'nothing is stored yet, so Vietnamese must win over af-ZA',
-      );
-    });
+        final state = container.read(voiceListProvider);
+        expect(
+          state.voices.where((v) => v.providerVoiceId == 'vi-VN-HoaiMyNeural'),
+          isNotEmpty,
+        );
+        expect(
+          state.voices
+              .firstWhere((v) => v.id == state.selectedVoiceId)
+              .providerVoiceId,
+          'vi-VN-HoaiMyNeural',
+          reason: 'nothing is stored yet, so Vietnamese must win over af-ZA',
+        );
+      },
+    );
 
-    test('a stored voice that no longer exists falls back to Vietnamese', () async {
-      // The clone was deleted on the machine, but the id is still in settings.
-      await SettingsLocalDataSource(db).setDefaultVoiceId(999);
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          httpClientFactoryProvider.overrideWithValue(
-            () => MockClient(
-              (_) async => _json({
-                'provider': 'local',
-                'voices': [
-                  {
-                    'voice_id': 'af-ZA-WillemNeural',
-                    'name': 'Edge Willem (nam)',
-                    'category': 'premade',
-                    'labels': {'language': 'af-ZA', 'gender': 'male'},
-                  },
-                  {
-                    'voice_id': 'vi-VN-NamMinhNeural',
-                    'name': 'Edge NamMinh (nam)',
-                    'category': 'premade',
-                    'labels': {'language': 'vi', 'gender': 'male'},
-                  },
-                ],
-              }, 200),
+    test(
+      'a stored voice that no longer exists falls back to Vietnamese',
+      () async {
+        // The clone was deleted on the machine, but the id is still in settings.
+        await SettingsLocalDataSource(db).setDefaultVoiceId(999);
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            httpClientFactoryProvider.overrideWithValue(
+              () => MockClient(
+                (_) async => _json({
+                  'provider': 'local',
+                  'voices': [
+                    {
+                      'voice_id': 'af-ZA-WillemNeural',
+                      'name': 'Edge Willem (nam)',
+                      'category': 'premade',
+                      'labels': {'language': 'af-ZA', 'gender': 'male'},
+                    },
+                    {
+                      'voice_id': 'vi-VN-NamMinhNeural',
+                      'name': 'Edge NamMinh (nam)',
+                      'category': 'premade',
+                      'labels': {'language': 'vi', 'gender': 'male'},
+                    },
+                  ],
+                }, 200),
+              ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      final subscription = container.listen(voiceListProvider, (_, _) {});
-      addTearDown(subscription.close);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+          ],
+        );
+        addTearDown(container.dispose);
+        final subscription = container.listen(voiceListProvider, (_, _) {});
+        addTearDown(subscription.close);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final state = container.read(voiceListProvider);
-      expect(
-        state.voices.firstWhere((v) => v.id == state.selectedVoiceId)
-            .providerVoiceId,
-        'vi-VN-NamMinhNeural',
-      );
-    });
+        final state = container.read(voiceListProvider);
+        expect(
+          state.voices
+              .firstWhere((v) => v.id == state.selectedVoiceId)
+              .providerVoiceId,
+          'vi-VN-NamMinhNeural',
+        );
+      },
+    );
   });
 
   group('An unreachable backend is reported as such', () {
@@ -586,26 +594,29 @@ void main() {
       );
     });
 
-    test('the voice list explains the backend instead of saying "unknown"', () async {
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          httpClientFactoryProvider.overrideWithValue(
-            () => MockClient(
-              (_) async => throw const SocketException('Connection refused'),
+    test(
+      'the voice list explains the backend instead of saying "unknown"',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            httpClientFactoryProvider.overrideWithValue(
+              () => MockClient(
+                (_) async => throw const SocketException('Connection refused'),
+              ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      final subscription = container.listen(voiceListProvider, (_, _) {});
-      addTearDown(subscription.close);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+          ],
+        );
+        addTearDown(container.dispose);
+        final subscription = container.listen(voiceListProvider, (_, _) {});
+        addTearDown(subscription.close);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final state = container.read(voiceListProvider);
-      expect(state.voices, isEmpty);
-      expect(state.error, AppStrings.errorBackendUnreachable);
-    });
+        final state = container.read(voiceListProvider);
+        expect(state.voices, isEmpty);
+        expect(state.error, AppStrings.errorBackendUnreachable);
+      },
+    );
 
     test('a raw socket error maps to the same guidance', () {
       expect(
@@ -614,20 +625,12 @@ void main() {
       );
       expect(
         mapError(
-          const TtsProviderException(
-            'down',
-            kind: TtsErrorKind.network,
-          ),
+          const TtsProviderException('down', kind: TtsErrorKind.network),
         ),
         AppStrings.errorBackendUnreachable,
       );
       expect(
-        mapError(
-          const TtsProviderException(
-            'boom',
-            kind: TtsErrorKind.server,
-          ),
-        ),
+        mapError(const TtsProviderException('boom', kind: TtsErrorKind.server)),
         AppStrings.errorServer,
       );
     });

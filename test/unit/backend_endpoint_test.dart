@@ -64,14 +64,14 @@ void main() {
     });
 
     test('host and port can be read back for display and probing', () {
-      expect(
-        BackendEndpoint.endpointOf('http://192.168.1.20:3000/v1'),
-        (host: '192.168.1.20', port: 3000),
-      );
-      expect(
-        BackendEndpoint.endpointOf('https://api.vietvoice.studio/v1'),
-        (host: 'api.vietvoice.studio', port: 443),
-      );
+      expect(BackendEndpoint.endpointOf('http://192.168.1.20:3000/v1'), (
+        host: '192.168.1.20',
+        port: 3000,
+      ));
+      expect(BackendEndpoint.endpointOf('https://api.vietvoice.studio/v1'), (
+        host: 'api.vietvoice.studio',
+        port: 443,
+      ));
       expect(BackendEndpoint.endpointOf('http://'), isNull);
     });
   });
@@ -115,13 +115,10 @@ void main() {
       );
 
       expect(probed.length, 254);
-      expect(
-        found.map((server) => server.baseUrl),
-        [
-          'http://192.168.5.7:3000/v1',
-          'http://192.168.5.42:3000/v1',
-        ],
-      );
+      expect(found.map((server) => server.baseUrl), [
+        'http://192.168.5.7:3000/v1',
+        'http://192.168.5.42:3000/v1',
+      ]);
       expect(found.first.latencyMs, 7);
     });
 

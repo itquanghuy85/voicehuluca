@@ -32,7 +32,7 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  AppDatabase.forTesting(DatabaseConnection connection) : super(connection);
+  AppDatabase.forTesting(QueryExecutor executor) : super(executor);
 
   @override
   int get schemaVersion => 3;
@@ -74,8 +74,14 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertProject(ProjectsCompanion entry) =>
       into(projects).insert(entry);
 
-  Future<bool> updateProject(ProjectsCompanion entry) =>
-      update(projects).replace(entry);
+  Future<bool> updateProject(ProjectsCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(projects)..where((t) => t.id.equals(id))).write(
+      entry.copyWith(id: const Value.absent()),
+    );
+    return rows > 0;
+  }
 
   Future<int> deleteProject(int id) =>
       (delete(projects)..where((t) => t.id.equals(id))).go();
@@ -97,8 +103,14 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertScript(ScriptsCompanion entry) =>
       into(scripts).insert(entry);
 
-  Future<bool> updateScript(ScriptsCompanion entry) =>
-      update(scripts).replace(entry);
+  Future<bool> updateScript(ScriptsCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(scripts)..where((t) => t.id.equals(id))).write(
+      entry.copyWith(id: const Value.absent()),
+    );
+    return rows > 0;
+  }
 
   Future<int> deleteScript(int id) =>
       (delete(scripts)..where((t) => t.id.equals(id))).go();
@@ -122,8 +134,13 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertSegment(ScriptSegmentsCompanion entry) =>
       into(scriptSegments).insert(entry);
 
-  Future<bool> updateSegment(ScriptSegmentsCompanion entry) =>
-      update(scriptSegments).replace(entry);
+  Future<bool> updateSegment(ScriptSegmentsCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(scriptSegments)..where((t) => t.id.equals(id)))
+        .write(entry.copyWith(id: const Value.absent()));
+    return rows > 0;
+  }
 
   Future<int> deleteSegment(int id) =>
       (delete(scriptSegments)..where((t) => t.id.equals(id))).go();
@@ -161,8 +178,14 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> insertVoice(VoicesCompanion entry) => into(voices).insert(entry);
 
-  Future<bool> updateVoice(VoicesCompanion entry) =>
-      update(voices).replace(entry);
+  Future<bool> updateVoice(VoicesCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(voices)..where((t) => t.id.equals(id))).write(
+      entry.copyWith(id: const Value.absent()),
+    );
+    return rows > 0;
+  }
 
   Future<int> updateVoiceFavorite(int voiceId, bool isFavorite) {
     return (update(voices)..where((t) => t.id.equals(voiceId))).write(
@@ -187,8 +210,13 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertVoiceReference(VoiceReferencesCompanion entry) =>
       into(voiceReferences).insert(entry);
 
-  Future<bool> updateVoiceReference(VoiceReferencesCompanion entry) =>
-      update(voiceReferences).replace(entry);
+  Future<bool> updateVoiceReference(VoiceReferencesCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(voiceReferences)..where((t) => t.id.equals(id)))
+        .write(entry.copyWith(id: const Value.absent()));
+    return rows > 0;
+  }
 
   Future<int> deleteVoiceReference(int id) =>
       (delete(voiceReferences)..where((t) => t.id.equals(id))).go();
@@ -225,8 +253,19 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertAudioAsset(AudioAssetsCompanion entry) =>
       into(audioAssets).insert(entry);
 
-  Future<bool> updateAudioAsset(AudioAssetsCompanion entry) =>
-      update(audioAssets).replace(entry);
+  Future<bool> updateAudioAsset(AudioAssetsCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(audioAssets)..where((t) => t.id.equals(id)))
+        .write(entry.copyWith(id: const Value.absent()));
+    return rows > 0;
+  }
+
+  Future<int> updateAudioFavorite(int audioId, bool isFavorite) {
+    return (update(audioAssets)..where((t) => t.id.equals(audioId))).write(
+      AudioAssetsCompanion(isFavorite: Value(isFavorite)),
+    );
+  }
 
   Future<int> deleteAudioAsset(int id) =>
       (delete(audioAssets)..where((t) => t.id.equals(id))).go();
@@ -254,8 +293,13 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertGenerationJob(GenerationJobsCompanion entry) =>
       into(generationJobs).insert(entry);
 
-  Future<bool> updateGenerationJob(GenerationJobsCompanion entry) =>
-      update(generationJobs).replace(entry);
+  Future<bool> updateGenerationJob(GenerationJobsCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : null;
+    if (id == null) return false;
+    final rows = await (update(generationJobs)..where((t) => t.id.equals(id)))
+        .write(entry.copyWith(id: const Value.absent()));
+    return rows > 0;
+  }
 
   Future<int> deleteGenerationJob(int id) =>
       (delete(generationJobs)..where((t) => t.id.equals(id))).go();
@@ -278,8 +322,14 @@ class AppDatabase extends _$AppDatabase {
         .map((data) => AppSettings.fromData(data));
   }
 
-  Future<bool> updateSettings(AppSettingsTableCompanion entry) =>
-      update(appSettingsTable).replace(entry);
+  Future<bool> updateSettings(AppSettingsTableCompanion entry) async {
+    final rows =
+        await (update(
+              appSettingsTable,
+            )..where((t) => t.id.equals(entry.id.present ? entry.id.value : 1)))
+            .write(entry);
+    return rows > 0;
+  }
 
   // Transaction helpers
   Future<void> deleteProjectCascade(int projectId) async {

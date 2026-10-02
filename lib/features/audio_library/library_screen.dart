@@ -1,12 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
+import '../../core/storage/audio_export_service.dart';
 import '../../data/models/audio_asset.dart';
 import '../audio_detail/audio_detail_screen.dart';
 import 'library_provider.dart';
@@ -23,11 +27,16 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final AudioPlayer _player = AudioPlayer();
+  int? _playingId;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _player.playerStateStream.listen((_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(libraryProvider.notifier).loadLibrary();
     });
@@ -35,8 +44,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _player.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -142,12 +152,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);
-              ref.read(libraryProvider.notifier).toggleFavorite(audio.id);
-              _showSnackBar(
-                audio.isFavorite
-                    ? AppStrings.libraryFavoriteRemoved
-                    : AppStrings.libraryFavoriteAdded,
-              );
+              _toggleFavorite(audio);
             },
             child: Text(
               audio.isFavorite
@@ -168,7 +173,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);
-              _showSnackBar(AppStrings.libraryExportSuccess);
+              _exportAudio(audio);
             },
             child: const Text(AppStrings.libraryExport),
           ),
@@ -198,6 +203,37 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         shape: RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
       ),
     );
+  }
+
+  Future<void> _toggleFavorite(AudioAsset audio) async {
+    final notifier = ref.read(libraryProvider.notifier);
+    final ok = await notifier.toggleFavorite(audio.id);
+    if (!mounted) return;
+    if (!ok) {
+      _showSnackBar(AppStrings.libraryFavoriteFailed);
+      return;
+    }
+    _showSnackBar(
+      audio.isFavorite
+          ? AppStrings.libraryFavoriteRemoved
+          : AppStrings.libraryFavoriteAdded,
+    );
+  }
+
+  Future<void> _exportAudio(AudioAsset audio) async {
+    _showSnackBar(AppStrings.resultDownloadStarted);
+    try {
+      final name = '${audio.title}.${audio.format}';
+      final saved = await AudioExportService.exportToDownloads(
+        sourcePath: audio.filePath,
+        fileName: name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'),
+      );
+      if (!mounted) return;
+      _showSnackBar(AppStrings.libraryExportedTo(saved.location));
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(AppStrings.libraryExportFailed);
+    }
   }
 
   @override
@@ -306,20 +342,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
       ),
-      child: Row(
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
         children: [
           _buildChip(
             AppStrings.libraryFilterAll,
             LibraryFilter.all,
             colorScheme,
           ),
-          const SizedBox(width: AppSpacing.sm),
           _buildChip(
             AppStrings.libraryFilterRecent,
             LibraryFilter.recent,
             colorScheme,
           ),
-          const SizedBox(width: AppSpacing.sm),
           _buildChip(
             AppStrings.libraryFilterFavorites,
             LibraryFilter.favorites,
@@ -375,8 +411,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     if (state.audios.isEmpty) {
-      return _buildEmptyState(colorScheme);
+      return _buildEmptyState(colorScheme, state.filter, state.searchQuery);
     }
+
+    final voiceNames =
+        ref.watch(libraryVoiceNamesProvider).valueOrNull ??
+        const <int, String>{};
 
     return RefreshIndicator(
       onRefresh: () => ref.read(libraryProvider.notifier).refreshLibrary(),
@@ -388,7 +428,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           if (index == state.audios.length) {
             return _buildLoadingMore(colorScheme, state.isLoadingMore);
           }
-          return _buildAudioItem(state.audios[index], colorScheme);
+          return _buildAudioItem(state.audios[index], colorScheme, voiceNames);
         },
       ),
     );
@@ -424,11 +464,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              AppStrings.errorUnknown,
+              error,
               style: AppTypography.body.copyWith(
                 color: colorScheme.textSecondary,
               ),
               textAlign: TextAlign.center,
+              maxLines: 6,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: AppSpacing.lg),
             CupertinoButton(
@@ -445,7 +487,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildEmptyState(AppColorScheme colorScheme) {
+  Widget _buildEmptyState(
+    AppColorScheme colorScheme,
+    LibraryFilter filter,
+    String searchQuery,
+  ) {
+    final isFavorites = filter == LibraryFilter.favorites;
+    final isSearching = searchQuery.trim().isNotEmpty;
+
+    final title = isSearching
+        ? AppStrings.libraryNoSearchResult
+        : isFavorites
+        ? AppStrings.libraryEmptyFavorites
+        : AppStrings.libraryEmptyAudio;
+    final hint = isSearching
+        ? AppStrings.libraryNoSearchResultHint
+        : isFavorites
+        ? AppStrings.libraryEmptyFavoritesHint
+        : AppStrings.libraryEmptyAudioHint;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -453,13 +513,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              AppIcons.audio,
+              isFavorites ? AppIcons.favorite : AppIcons.audio,
               size: AppSizes.iconExtraLarge,
               color: colorScheme.textTertiary,
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              AppStrings.libraryEmptyAudio,
+              title,
               style: AppTypography.title.copyWith(
                 color: colorScheme.textPrimary,
               ),
@@ -467,31 +527,37 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              AppStrings.libraryEmptyAudioHint,
+              hint,
               style: AppTypography.body.copyWith(
                 color: colorScheme.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: AppSpacing.xxl),
-            CupertinoButton(
-              onPressed: widget.onCreateFirst ?? () {},
-              color: colorScheme.primary,
-              borderRadius: AppRadius.mediumAll,
-              child: Text(
-                AppStrings.libraryCreateFirst,
-                style: AppTypography.label.copyWith(
-                  color: colorScheme.onPrimary,
+            if (!isFavorites) ...[
+              const SizedBox(height: AppSpacing.xxl),
+              CupertinoButton(
+                onPressed: widget.onCreateFirst ?? () {},
+                color: colorScheme.primary,
+                borderRadius: AppRadius.mediumAll,
+                child: Text(
+                  AppStrings.libraryCreateFirst,
+                  style: AppTypography.label.copyWith(
+                    color: colorScheme.onPrimary,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAudioItem(AudioAsset audio, AppColorScheme colorScheme) {
+  Widget _buildAudioItem(
+    AudioAsset audio,
+    AppColorScheme colorScheme,
+    Map<int, String> voiceNames,
+  ) {
     return Dismissible(
       key: Key(audio.id.toString()),
       direction: DismissDirection.endToStart,
@@ -534,7 +600,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             children: [
               _buildPlayButton(audio, colorScheme),
               const SizedBox(width: AppSpacing.md),
-              Expanded(child: _buildAudioInfo(audio, colorScheme)),
+              Expanded(child: _buildAudioInfo(audio, colorScheme, voiceNames)),
               _buildMenuButton(audio, colorScheme),
             ],
           ),
@@ -544,22 +610,66 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _buildPlayButton(AudioAsset audio, AppColorScheme colorScheme) {
-    return Container(
-      width: AppSizes.touchTarget,
-      height: AppSizes.touchTarget,
-      decoration: BoxDecoration(
-        color: colorScheme.primaryContainer,
-        borderRadius: AppRadius.mediumAll,
-      ),
-      child: Icon(
-        AppIcons.play,
-        color: colorScheme.primary,
-        size: AppSizes.iconMedium,
+    final isThisPlaying = _playingId == audio.id && _player.playing;
+    return Semantics(
+      button: true,
+      label: isThisPlaying ? AppStrings.libraryPause : AppStrings.libraryPlay,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _togglePlay(audio),
+        child: Container(
+          width: AppSizes.touchTarget,
+          height: AppSizes.touchTarget,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: AppRadius.mediumAll,
+          ),
+          child: Icon(
+            isThisPlaying ? AppIcons.pause : AppIcons.play,
+            color: colorScheme.primary,
+            size: AppSizes.iconMedium,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildAudioInfo(AudioAsset audio, AppColorScheme colorScheme) {
+  /// Plays an audio file straight from the list, so the play button is not a
+  /// decoration that only opens the detail screen.
+  Future<void> _togglePlay(AudioAsset audio) async {
+    final player = _player;
+
+    if (_playingId == audio.id) {
+      if (player.playing) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+      if (mounted) setState(() {});
+      return;
+    }
+
+    try {
+      final file = File(audio.filePath);
+      if (!await file.exists()) {
+        _showSnackBar(AppStrings.errorFileNotFound);
+        return;
+      }
+      await player.stop();
+      await player.setFilePath(audio.filePath);
+      if (mounted) setState(() => _playingId = audio.id);
+      await player.play();
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) _showSnackBar(AppStrings.errorPlaybackFailed);
+    }
+  }
+
+  Widget _buildAudioInfo(
+    AudioAsset audio,
+    AppColorScheme colorScheme,
+    Map<int, String> voiceNames,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -602,15 +712,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               color: colorScheme.textTertiary,
             ),
             const SizedBox(width: AppSpacing.xs),
-            Text(
-              AppStrings.libraryVoiceUnknown,
-              style: AppTypography.bodySmall.copyWith(
-                color: colorScheme.textTertiary,
+            Flexible(
+              child: Text(
+                voiceNames[audio.voiceId] ?? AppStrings.libraryVoiceUnknown,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySmall.copyWith(
+                  color: colorScheme.textTertiary,
+                ),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             Text(
               _formatDate(audio.createdAt),
+              maxLines: 1,
               style: AppTypography.bodySmall.copyWith(
                 color: colorScheme.textTertiary,
               ),

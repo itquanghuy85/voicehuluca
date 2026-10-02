@@ -10,6 +10,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/models/audio_asset.dart';
+import '../audio_library/library_provider.dart';
 import 'audio_detail_provider.dart';
 
 class AudioDetailScreen extends ConsumerStatefulWidget {
@@ -551,7 +552,8 @@ class _AudioDetailScreenState extends ConsumerState<AudioDetailScreen> {
           _buildInfoRow(
             AppIcons.voice,
             AppStrings.audioDetailVoice,
-            AppStrings.libraryVoiceUnknown,
+            ref.watch(libraryVoiceNamesProvider).valueOrNull?[audio.voiceId] ??
+                AppStrings.libraryVoiceUnknown,
             colorScheme,
           ),
           const SizedBox(height: AppSpacing.sm),

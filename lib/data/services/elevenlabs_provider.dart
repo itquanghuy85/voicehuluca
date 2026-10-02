@@ -1,5 +1,4 @@
 import '../../core/localization/app_strings.dart';
-import '../datasources/remote/tts_remote_datasource.dart';
 import 'backend_tts_provider.dart';
 import 'tts_provider.dart';
 

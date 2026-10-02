@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:voice_huluca/core/app/app_settings_opener.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
@@ -59,6 +60,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   String? _error;
   bool _isRecording = false;
   bool _isSaving = false;
+  bool _needsMicPermission = false;
 
   @override
   void initState() {
@@ -75,6 +77,20 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   }
 
   bool get _hasSample => _recordingPath != null;
+
+  Future<void> _openAppSettings() async {
+    await openAppSettings();
+    // Re-check as soon as the user comes back so the button disappears once
+    // the microphone has been granted.
+    final granted = await _recorder.hasPermission();
+    if (!mounted) return;
+    setState(() {
+      _needsMicPermission = !granted;
+      if (granted) {
+        _error = null;
+      }
+    });
+  }
 
   bool get _canSave =>
       _hasSample &&
@@ -94,13 +110,17 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   Future<void> _startRecording() async {
     setState(() {
       _error = null;
+      _needsMicPermission = false;
       _elapsed = Duration.zero;
       _recordingPath = null;
     });
 
     final hasPermission = await _recorder.hasPermission();
     if (!hasPermission) {
-      setState(() => _error = AppStrings.recordVoicePermission);
+      setState(() {
+        _error = AppStrings.recordVoicePermissionHint;
+        _needsMicPermission = true;
+      });
       return;
     }
 
@@ -265,6 +285,28 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                     message: _error!,
                     color: colors.error,
                     icon: AppIcons.errorOutlined,
+                  ),
+                ],
+                if (_needsMicPermission) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    height: AppSizes.buttonLarge,
+                    child: ElevatedButton.icon(
+                      onPressed: _openAppSettings,
+                      icon: const Icon(
+                        AppIcons.settings,
+                        size: AppSizes.iconLarge,
+                      ),
+                      label: const Text(AppStrings.recordVoiceOpenSettings),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colors.primary,
+                        foregroundColor: colors.onPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.largeAll,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),
