@@ -14,6 +14,7 @@ import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/core/utils/connectivity_utils.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart'
     hide Voice;
+import 'package:voice_huluca/core/network/backend_endpoint.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/remote/tts_remote_datasource.dart';
@@ -182,13 +183,62 @@ final httpClientFactoryProvider = Provider<http.Client Function()>((ref) {
   return () => http.Client();
 });
 
+/// Base URL of the backend the app talks to.
+///
+/// Stored in settings so one build works on any machine: the user either types
+/// an address or picks one found on the LAN. Null in storage means "use the
+/// address this build was compiled with".
+final backendUrlProvider =
+    NotifierProvider<BackendUrlNotifier, String>(BackendUrlNotifier.new);
+
+class BackendUrlNotifier extends Notifier<String> {
+  bool _disposed = false;
+
+  @override
+  String build() {
+    ref.watch(settingsLocalDataSourceProvider);
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_restore);
+    return AppConstants.apiBaseUrl;
+  }
+
+  Future<void> _restore() async {
+    final stored =
+        (await ref.read(settingsLocalDataSourceProvider).getSettings())
+            .backendUrl;
+    if (_disposed) return;
+    final url = BackendEndpoint.resolve(stored);
+    if (url != state) {
+      state = url;
+    }
+  }
+
+  /// Saves a new address and rebuilds everything that talks to the backend.
+  Future<void> setUrl(String url) async {
+    final normalized = BackendEndpoint.parse(url).url;
+    if (normalized == null) {
+      return;
+    }
+    await ref.read(settingsLocalDataSourceProvider).setBackendUrl(normalized);
+    if (normalized != state) {
+      state = normalized;
+    }
+  }
+
+  /// Back to the address this build was compiled with.
+  Future<void> reset() async {
+    await ref.read(settingsLocalDataSourceProvider).setBackendUrl(null);
+    state = AppConstants.apiBaseUrl;
+  }
+}
+
 /// Backend gateway bound to the active provider.
 final ttsRemoteDataSourceProvider = Provider<TtsRemoteDatasource>((ref) {
   final apiKey = ref.watch(apiKeyProvider).valueOrNull ?? '';
   final provider = ref.watch(ttsProviderIdProvider);
   return TtsRemoteDatasource(
     client: ref.watch(httpClientFactoryProvider)(),
-    baseUrl: AppConstants.apiBaseUrl,
+    baseUrl: ref.watch(backendUrlProvider),
     apiKey: apiKey,
     provider: provider,
   );
@@ -221,7 +271,7 @@ final activeProviderSupportsCloningProvider = Provider<bool>((ref) {
 final providerAvailabilityProvider =
     FutureProvider.autoDispose<Map<String, bool>>((ref) async {
       final remote = TtsRemoteDatasource(
-        baseUrl: AppConstants.apiBaseUrl,
+        baseUrl: ref.watch(backendUrlProvider),
         apiKey: ref.watch(apiKeyProvider).valueOrNull ?? '',
         // Availability is provider agnostic; the default id is enough.
         provider: AppConstants.defaultTtsProvider,

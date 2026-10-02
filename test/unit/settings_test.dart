@@ -1,5 +1,8 @@
+import 'package:drift/drift.dart' show DatabaseConnection;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart';
+import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/models/app_settings.dart';
 
 void main() {
@@ -176,6 +179,31 @@ void main() {
       expect(settings.autoSplit, isFalse);
       expect(settings.warningThreshold, 800);
       expect(settings.ttsProvider, 'elevenlabs');
+    });
+
+    test('the backend address survives a database round trip', () async {
+      final db = AppDatabase.forTesting(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      addTearDown(db.close);
+      final datasource = SettingsLocalDataSource(db);
+
+      // Fresh install: nothing stored, so the compiled default applies.
+      expect((await datasource.getSettings()).backendUrl, isNull);
+
+      await datasource.setBackendUrl('http://192.168.1.20:3000/v1');
+      expect((await datasource.getSettings()).backendUrl,
+          'http://192.168.1.20:3000/v1');
+
+      // Other settings must not be wiped by the write.
+      await datasource.setTtsProvider('local');
+      final after = await datasource.getSettings();
+      expect(after.ttsProvider, 'local');
+      expect(after.backendUrl, 'http://192.168.1.20:3000/v1');
+      expect(after.defaultSpeed, 1.0);
+
+      await datasource.setBackendUrl(null);
+      expect((await datasource.getSettings()).backendUrl, isNull);
     });
   });
 }

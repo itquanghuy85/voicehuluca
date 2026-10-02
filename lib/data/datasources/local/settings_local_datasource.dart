@@ -24,6 +24,7 @@ class SettingsLocalDataSource {
       autoSplit: Value(settings.autoSplit),
       warningThreshold: Value(settings.warningThreshold),
       ttsProvider: Value(settings.ttsProvider),
+      backendUrl: Value(settings.backendUrl),
     );
     return _database.updateSettings(companion);
   }
@@ -66,5 +67,11 @@ class SettingsLocalDataSource {
   Future<bool> setTtsProvider(String providerId) async {
     final settings = await getSettings();
     return updateSettings(settings.copyWith(ttsProvider: providerId));
+  }
+
+  /// Pass null to fall back to the address the app was built with.
+  Future<bool> setBackendUrl(String? url) async {
+    final settings = await getSettings();
+    return updateSettings(settings.copyWith(backendUrl: url));
   }
 }

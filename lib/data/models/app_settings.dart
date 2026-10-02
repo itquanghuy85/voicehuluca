@@ -3,6 +3,9 @@ import 'package:drift/drift.dart';
 import '../../core/constants/app_constants.dart';
 import '../datasources/local/app_database.dart';
 
+/// Sentinel telling `copyWith` to keep the current value.
+const Object _unchanged = Object();
+
 class AppSettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
 
@@ -18,6 +21,8 @@ class AppSettingsTable extends Table {
   IntColumn get warningThreshold =>
       integer().withDefault(const Constant(1000))();
   TextColumn get ttsProvider => text().withDefault(const Constant('google'))();
+  /// Base URL of the VietVoice backend. Null means "use the compiled default".
+  TextColumn get backendUrl => text().nullable()();
 }
 
 class AppSettings {
@@ -30,6 +35,7 @@ class AppSettings {
   final bool autoSplit;
   final int warningThreshold;
   final String ttsProvider;
+  final String? backendUrl;
 
   const AppSettings({
     this.id = 1,
@@ -41,6 +47,7 @@ class AppSettings {
     this.autoSplit = true,
     this.warningThreshold = 1000,
     this.ttsProvider = AppConstants.defaultTtsProvider,
+    this.backendUrl,
   });
 
   AppSettings copyWith({
@@ -53,6 +60,9 @@ class AppSettings {
     bool? autoSplit,
     int? warningThreshold,
     String? ttsProvider,
+    // `null` here means "clear the stored address", so it needs a sentinel:
+    // without one, copyWith could never go back to the compiled default.
+    Object? backendUrl = _unchanged,
   }) {
     return AppSettings(
       id: id ?? this.id,
@@ -64,6 +74,9 @@ class AppSettings {
       autoSplit: autoSplit ?? this.autoSplit,
       warningThreshold: warningThreshold ?? this.warningThreshold,
       ttsProvider: ttsProvider ?? this.ttsProvider,
+      backendUrl: identical(backendUrl, _unchanged)
+          ? this.backendUrl
+          : backendUrl as String?,
     );
   }
 
@@ -79,6 +92,7 @@ class AppSettings {
       warningThreshold: json['warningThreshold'] as int? ?? 1000,
       ttsProvider:
           json['ttsProvider'] as String? ?? AppConstants.defaultTtsProvider,
+      backendUrl: json['backendUrl'] as String?,
     );
   }
 
@@ -93,6 +107,7 @@ class AppSettings {
       'autoSplit': autoSplit,
       'warningThreshold': warningThreshold,
       'ttsProvider': ttsProvider,
+      'backendUrl': backendUrl,
     };
   }
 
@@ -107,6 +122,7 @@ class AppSettings {
       autoSplit: data.autoSplit,
       warningThreshold: data.warningThreshold,
       ttsProvider: data.ttsProvider,
+      backendUrl: data.backendUrl,
     );
   }
 }

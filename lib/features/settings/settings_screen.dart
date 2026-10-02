@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
+import '../../core/network/backend_discovery.dart';
+import '../../core/network/backend_endpoint.dart';
 import '../../data/services/tts_provider.dart';
 import '../voice/voice_provider.dart';
 import 'settings_provider.dart';
@@ -18,12 +20,28 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final TextEditingController _backendController = TextEditingController();
+  final LanBackendScanner _scanner = const LanBackendScanner();
+  bool _isScanning = false;
+  bool _isChecking = false;
+  int _scannedHosts = 0;
+  int _scanTotal = 0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(settingsProvider.notifier).loadSettings();
+      // The stored address may still be loading, so seed the field now and let
+      // the listener in build() keep it in sync afterwards.
+      _backendController.text = ref.read(backendUrlProvider);
     });
+  }
+
+  @override
+  void dispose() {
+    _backendController.dispose();
+    super.dispose();
   }
 
   String _formatStorageSize(int bytes) {
@@ -264,10 +282,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {bool isError = false}) {
+    final colorScheme = AppColorScheme.of(Theme.of(context).brightness);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
+        backgroundColor: isError ? colorScheme.error : null,
         duration: AppConstants.snackBarDuration,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
@@ -279,6 +299,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(settingsProvider);
     final colorScheme = AppColorScheme.of(Theme.of(context).brightness);
+
+    // Picking a server from the LAN sheet changes the provider; mirror it here.
+    ref.listen<String>(backendUrlProvider, (_, next) {
+      if (next != _backendController.text) {
+        _backendController.text = next;
+      }
+    });
 
     return Scaffold(
       backgroundColor: colorScheme.background,
@@ -323,6 +350,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       children: [
         _buildVoiceServiceSection(state, colorScheme),
+        const SizedBox(height: AppSpacing.lg),
+        _buildBackendSection(colorScheme),
         const SizedBox(height: AppSpacing.lg),
         _buildTtsProviderSection(state, colorScheme),
         const SizedBox(height: AppSpacing.lg),
@@ -378,6 +407,250 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: AppSpacing.md),
           child,
         ],
+      ),
+    );
+  }
+
+  /// Lets the user point the app at the machine that runs the backend, either by
+  /// typing its address or by letting the app find it on the same Wi-Fi.
+  Widget _buildBackendSection(AppColorScheme colorScheme) {
+    final activeUrl = ref.watch(backendUrlProvider);
+    final usingDefault = activeUrl == AppConstants.apiBaseUrl;
+
+    return _buildSection(
+      title: AppStrings.settingsBackendTitle,
+      description: AppStrings.settingsBackendDesc,
+      colorScheme: colorScheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CupertinoTextField(
+            controller: _backendController,
+            placeholder: AppStrings.settingsBackendUrlHint,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            onSubmitted: (_) => _saveBackendUrl(),
+            style: AppTypography.body.copyWith(color: colorScheme.textPrimary),
+            placeholderStyle: AppTypography.body.copyWith(
+              color: colorScheme.textTertiary,
+            ),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: AppRadius.mediumAll,
+              border: Border.all(color: colorScheme.divider),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Icon(
+                AppIcons.server,
+                size: AppSizes.iconSmall,
+                color: colorScheme.textTertiary,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  usingDefault
+                      ? '${AppStrings.settingsBackendCurrent}: $activeUrl'
+                      : activeUrl,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: colorScheme.textTertiary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  onPressed: _isScanning ? null : _scanLan,
+                  color: colorScheme.primary,
+                  borderRadius: AppRadius.mediumAll,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text(
+                    _isScanning
+                        ? AppStrings.fill(AppStrings.settingsBackendScanning, [
+                            _scannedHosts,
+                            _scanTotal,
+                          ])
+                        : AppStrings.settingsBackendScan,
+                    style: AppTypography.label.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: CupertinoButton(
+                  onPressed: _isChecking ? null : _checkBackendUrl,
+                  color: colorScheme.surface,
+                  borderRadius: AppRadius.mediumAll,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: _isChecking
+                      ? const CupertinoActivityIndicator()
+                      : Text(
+                          AppStrings.settingsBackendCheck,
+                          style: AppTypography.label.copyWith(
+                            color: colorScheme.textPrimary,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  onPressed: _saveBackendUrl,
+                  color: colorScheme.secondary,
+                  borderRadius: AppRadius.mediumAll,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text(
+                    AppStrings.settingsBackendSave,
+                    style: AppTypography.label.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              if (!usingDefault)
+                CupertinoButton(
+                  onPressed: _resetBackendUrl,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text(
+                    AppStrings.settingsBackendReset,
+                    style: AppTypography.label.copyWith(
+                      color: colorScheme.textSecondary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveBackendUrl() async {
+    final parsed = BackendEndpoint.parse(_backendController.text);
+    if (parsed.url == null) {
+      _showSnackBar(
+        parsed.message ?? BackendEndpoint.invalidMessage,
+        isError: true,
+      );
+      return;
+    }
+    await ref.read(backendUrlProvider.notifier).setUrl(parsed.url!);
+    _backendController.text = parsed.url!;
+    _showSnackBar(AppStrings.settingsBackendSaved);
+    // Reload the voice list against the new server straight away.
+    ref.invalidate(voiceListProvider);
+  }
+
+  Future<void> _resetBackendUrl() async {
+    await ref.read(backendUrlProvider.notifier).reset();
+    _backendController.text = AppConstants.apiBaseUrl;
+    _showSnackBar(AppStrings.settingsBackendSaved);
+    ref.invalidate(voiceListProvider);
+  }
+
+  /// Pings whatever is in the field without saving it.
+  Future<void> _checkBackendUrl() async {
+    final parsed = BackendEndpoint.parse(_backendController.text);
+    if (parsed.url == null) {
+      _showSnackBar(
+        parsed.message ?? BackendEndpoint.invalidMessage,
+        isError: true,
+      );
+      return;
+    }
+    setState(() => _isChecking = true);
+    final latency = await _scanner.ping(parsed.url!);
+    if (!mounted) return;
+    setState(() => _isChecking = false);
+    _showSnackBar(
+      latency == null
+          ? AppStrings.settingsBackendCheckFailed
+          : AppStrings.fill(AppStrings.settingsBackendCheckOk, [latency]),
+      isError: latency == null,
+    );
+  }
+
+  /// Walks the local /24 and offers every backend that answers.
+  Future<void> _scanLan() async {
+    final addresses = await LanBackendScanner.localAddresses();
+    if (addresses.isEmpty) {
+      _showSnackBar(AppStrings.settingsBackendScanNoAddress, isError: true);
+      return;
+    }
+
+    setState(() {
+      _isScanning = true;
+      _scannedHosts = 0;
+      _scanTotal = 0;
+    });
+
+    final found = await _scanner.scan(
+      addresses: addresses,
+      onProgress: (checked, total) {
+        if (mounted) {
+          setState(() {
+            _scannedHosts = checked;
+            _scanTotal = total;
+          });
+        }
+      },
+    );
+
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+    if (found.isEmpty) {
+      _showSnackBar(AppStrings.settingsBackendScanNone, isError: true);
+      return;
+    }
+    _showDiscoveredSheet(found);
+  }
+
+  void _showDiscoveredSheet(List<DiscoveredBackend> found) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: Text(AppStrings.settingsBackendScanTitle),
+        message: Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
+          child: Text(AppStrings.settingsBackendScanHint),
+        ),
+        actions: [
+          for (final server in found)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                _backendController.text = server.baseUrl;
+                _saveBackendUrl();
+              },
+              child: Text(
+                '${server.baseUrl}  ·  ${server.latencyMs} ms',
+                style: AppTypography.body,
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: Text(
+            AppStrings.settingsBackendClose,
+            style: AppTypography.label,
+          ),
+        ),
       ),
     );
   }

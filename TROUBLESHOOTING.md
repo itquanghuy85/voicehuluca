@@ -133,6 +133,25 @@ flutter pub run build_runner build --delete-conflicting-outputs
 | `HandshakeException` | SSL error | Check system date/time |
 | `Connection refused` | Server down | Check backend status |
 
+### "Không kết nối được máy chủ giọng nói"
+
+App không gọi được backend. Kiểm tra theo thứ tự:
+
+```
+1. Backend có chạy không?        → trên máy server: curl http://127.0.0.1:3000/v1/health
+2. Địa chỉ trong app đúng chưa? → Cài đặt → Máy chủ giọng nói → Kiểm tra
+3. Cùng mạng LAN không?         → điện thoại và máy server phải cùng một subnet.
+                                  Guest Wi-Fi / hotspot thường cô lập điện thoại.
+4. Firewall chặn cổng 3000?     → trên máy server:
+                                  netsh advfirewall firewall add rule name="VietVoice 3000" ^
+                                    dir=in action=allow protocol=TCP localport=3000
+5. Điện thoại gọi được server?   → dùng app Kiểm tra, hoặc trên điện thoại:
+                                  curl http://<ip-may-server>:3000/v1/health
+```
+
+Dò mạng LAN quét đúng `/24` quanh IP Wi-Fi của điện thoại (254 máy). Nếu backend
+nằm ở subnet khác (ví dụ `/22` và server ở 192.168.64.x) thì phải gõ tay địa chỉ.
+
 ---
 
 ## API Connection Issues

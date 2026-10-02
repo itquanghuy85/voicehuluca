@@ -7,6 +7,9 @@ abstract final class AppIcons {
   static const IconData exploreOutlined = Icons.explore_outlined;
   static const IconData settings = Icons.settings_rounded;
   static const IconData settingsOutlined = Icons.settings_outlined;
+  static const IconData server = Icons.dns_rounded;
+  static const IconData serverOutlined = Icons.dns_outlined;
+  static const IconData networkSearch = Icons.wifi_find_rounded;
   static const IconData profile = Icons.person_rounded;
   static const IconData profileOutlined = Icons.person_outline_rounded;
 

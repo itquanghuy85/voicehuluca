@@ -127,6 +127,31 @@ Settings → API Configuration → Backend URL
 
 See [BACKEND.md](BACKEND.md) for backend setup instructions.
 
+### Pointing the App at Your Machine (LAN)
+
+The app never hardcodes the backend address at runtime. **Cài đặt → Máy chủ giọng nói**
+has three ways to set it:
+
+1. **Dò mạng LAN** — the app takes the Wi-Fi address the phone already has, walks
+   that `/24` (254 hosts, 32 at a time) and asks each one for `GET /v1/health`.
+   Anything answering with the VietVoice signature is listed with its latency;
+   tap one to use it.
+2. **Type the address** — `192.168.1.20:3000` is enough. The app fills in
+   `http://` and `/v1` for you, so `192.168.1.20:3000`,
+   `http://192.168.1.20:3000/` and `http://192.168.1.20:3000/v1` all work.
+3. **Kiểm tra** — pings the address in the field without saving it.
+
+Notes for a home or office network:
+
+- Phone and server must be on the **same subnet**. Guest Wi-Fi, mobile data or a
+  phone hotspot usually isolates the phone, so discovery finds nothing — type the
+  address by hand in that case.
+- The backend listens on `0.0.0.0`, so allow port `3000` through the Windows
+  firewall if the phone cannot reach it.
+- Android builds allow plain HTTP on purpose (`usesCleartextTraffic`), because a
+  LAN backend is served over `http://`.
+- The address is stored per device, so the same APK works on any machine.
+
 ### Configuring Secrets
 
 #### API Key Setup (optional)

@@ -479,17 +479,17 @@ volumes:
 GET /v1/health
 ```
 
+Unauthenticated, and the app's LAN discovery depends on it: the phone scans the
+local `/24` and keeps the hosts whose health payload contains
+`"service": "vietvoice-backend"`. Keep that string stable.
+
 **Response (200):**
 ```json
 {
-  "status": "healthy",
+  "status": "ok",
+  "service": "vietvoice-backend",
   "version": "1.0.0",
-  "uptime": 86400,
-  "services": {
-    "database": "connected",
-    "redis": "connected",
-    "elevenlabs": "connected"
-  }
+  "discovery": true
 }
 ```
 
@@ -499,7 +499,15 @@ GET /v1/health
 
 ### App Configuration
 
-In the Flutter app, configure the backend URL:
+The address is a per-device setting, not a build constant:
+
+```
+Cài đặt → Máy chủ giọng nói
+```
+
+Type it (`192.168.1.20:3000` is enough) or tap **Dò mạng LAN** and let the app
+find the server on the same Wi-Fi. The stored value overrides the compiled
+default, which is only the fallback:
 
 ```dart
 // lib/core/constants/app_constants.dart

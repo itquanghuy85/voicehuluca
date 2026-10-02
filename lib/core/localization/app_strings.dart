@@ -1,6 +1,17 @@
 class AppStrings {
   AppStrings._();
 
+  /// Fills `{0}`, `{1}` … in [template] with [values].
+  ///
+  /// Keeps sentences in one place instead of splitting them across the widget.
+  static String fill(String template, List<Object?> values) {
+    var result = template;
+    for (var index = 0; index < values.length; index++) {
+      result = result.replaceAll('{$index}', '${values[index]}');
+    }
+    return result;
+  }
+
   // Home
   static const String homeTitle = 'VietVoice Studio';
   static const String homeWelcome = 'Chào mừng đến với VietVoice Studio';
@@ -293,6 +304,31 @@ class AppStrings {
   static const String settingsAccount = 'Tài khoản';
   static const String settingsLogout = 'Đăng xuất';
   static const String settingsLogoutConfirm = 'Bạn có chắc muốn đăng xuất?';
+  // Backend address (LAN)
+  static const String settingsBackendTitle = 'Máy chủ giọng nói';  static const String settingsBackendDesc =
+      'Địa chỉ máy đang chạy backend. Gõ IP của máy đó, hoặc bấm "Dò trong mạng LAN" để app tự tìm.';
+  static const String settingsBackendUrlLabel = 'Địa chỉ máy chủ';
+  static const String settingsBackendUrlHint = '192.168.1.20:3000';
+  static const String settingsBackendSave = 'Lưu';
+  static const String settingsBackendSaved = 'Đã lưu địa chỉ máy chủ.';
+  static const String settingsBackendReset = 'Dùng mặc định';
+  static const String settingsBackendScan = 'Dò mạng LAN';
+  static const String settingsBackendScanning = 'Đang dò {0}/{1}...';
+  static const String settingsBackendScanFound = 'Tìm thấy {0} máy chủ.';
+  static const String settingsBackendScanNone =
+      'Không tìm thấy backend nào. Hãy kiểm tra máy chủ đã bật và cùng một mạng Wi-Fi.';
+  static const String settingsBackendScanNoAddress =
+      'Không lấy được địa chỉ IP của máy. Hãy nhập địa chỉ thủ công.';
+  static const String settingsBackendScanTitle = 'Máy chủ trong mạng LAN';
+  static const String settingsBackendScanHint = 'Chạm để dùng máy chủ này';
+  static const String settingsBackendCheck = 'Kiểm tra';
+  static const String settingsBackendChecking = 'Đang kiểm tra...';
+  static const String settingsBackendCheckOk = 'Kết nối được ({0} ms).';
+  static const String settingsBackendCheckFailed =
+      'Không kết nối được máy chủ này.';
+  static const String settingsBackendCurrent = 'Đang dùng';
+  static const String settingsBackendClose = 'Đóng';
+
   static const String settingsAbout = 'Giới thiệu';
   static const String settingsVersion = 'Phiên bản';
   static const String settingsPrivacyPolicy = 'Chính sách bảo mật';

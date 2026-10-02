@@ -3810,6 +3810,17 @@ class $AppSettingsTableTable extends AppSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('google'),
   );
+  static const VerificationMeta _backendUrlMeta = const VerificationMeta(
+    'backendUrl',
+  );
+  @override
+  late final GeneratedColumn<String> backendUrl = GeneratedColumn<String>(
+    'backend_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3821,6 +3832,7 @@ class $AppSettingsTableTable extends AppSettingsTable
     autoSplit,
     warningThreshold,
     ttsProvider,
+    backendUrl,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3903,6 +3915,12 @@ class $AppSettingsTableTable extends AppSettingsTable
         ),
       );
     }
+    if (data.containsKey('backend_url')) {
+      context.handle(
+        _backendUrlMeta,
+        backendUrl.isAcceptableOrUnknown(data['backend_url']!, _backendUrlMeta),
+      );
+    }
     return context;
   }
 
@@ -3948,6 +3966,10 @@ class $AppSettingsTableTable extends AppSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}tts_provider'],
       )!,
+      backendUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}backend_url'],
+      ),
     );
   }
 
@@ -3968,6 +3990,9 @@ class AppSettingsTableData extends DataClass
   final bool autoSplit;
   final int warningThreshold;
   final String ttsProvider;
+
+  /// Base URL of the VietVoice backend. Null means "use the compiled default".
+  final String? backendUrl;
   const AppSettingsTableData({
     required this.id,
     required this.themeMode,
@@ -3978,6 +4003,7 @@ class AppSettingsTableData extends DataClass
     required this.autoSplit,
     required this.warningThreshold,
     required this.ttsProvider,
+    this.backendUrl,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3993,6 +4019,9 @@ class AppSettingsTableData extends DataClass
     map['auto_split'] = Variable<bool>(autoSplit);
     map['warning_threshold'] = Variable<int>(warningThreshold);
     map['tts_provider'] = Variable<String>(ttsProvider);
+    if (!nullToAbsent || backendUrl != null) {
+      map['backend_url'] = Variable<String>(backendUrl);
+    }
     return map;
   }
 
@@ -4009,6 +4038,9 @@ class AppSettingsTableData extends DataClass
       autoSplit: Value(autoSplit),
       warningThreshold: Value(warningThreshold),
       ttsProvider: Value(ttsProvider),
+      backendUrl: backendUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(backendUrl),
     );
   }
 
@@ -4027,6 +4059,7 @@ class AppSettingsTableData extends DataClass
       autoSplit: serializer.fromJson<bool>(json['autoSplit']),
       warningThreshold: serializer.fromJson<int>(json['warningThreshold']),
       ttsProvider: serializer.fromJson<String>(json['ttsProvider']),
+      backendUrl: serializer.fromJson<String?>(json['backendUrl']),
     );
   }
   @override
@@ -4042,6 +4075,7 @@ class AppSettingsTableData extends DataClass
       'autoSplit': serializer.toJson<bool>(autoSplit),
       'warningThreshold': serializer.toJson<int>(warningThreshold),
       'ttsProvider': serializer.toJson<String>(ttsProvider),
+      'backendUrl': serializer.toJson<String?>(backendUrl),
     };
   }
 
@@ -4055,6 +4089,7 @@ class AppSettingsTableData extends DataClass
     bool? autoSplit,
     int? warningThreshold,
     String? ttsProvider,
+    Value<String?> backendUrl = const Value.absent(),
   }) => AppSettingsTableData(
     id: id ?? this.id,
     themeMode: themeMode ?? this.themeMode,
@@ -4067,6 +4102,7 @@ class AppSettingsTableData extends DataClass
     autoSplit: autoSplit ?? this.autoSplit,
     warningThreshold: warningThreshold ?? this.warningThreshold,
     ttsProvider: ttsProvider ?? this.ttsProvider,
+    backendUrl: backendUrl.present ? backendUrl.value : this.backendUrl,
   );
   AppSettingsTableData copyWithCompanion(AppSettingsTableCompanion data) {
     return AppSettingsTableData(
@@ -4091,6 +4127,9 @@ class AppSettingsTableData extends DataClass
       ttsProvider: data.ttsProvider.present
           ? data.ttsProvider.value
           : this.ttsProvider,
+      backendUrl: data.backendUrl.present
+          ? data.backendUrl.value
+          : this.backendUrl,
     );
   }
 
@@ -4105,7 +4144,8 @@ class AppSettingsTableData extends DataClass
           ..write('autoNormalize: $autoNormalize, ')
           ..write('autoSplit: $autoSplit, ')
           ..write('warningThreshold: $warningThreshold, ')
-          ..write('ttsProvider: $ttsProvider')
+          ..write('ttsProvider: $ttsProvider, ')
+          ..write('backendUrl: $backendUrl')
           ..write(')'))
         .toString();
   }
@@ -4121,6 +4161,7 @@ class AppSettingsTableData extends DataClass
     autoSplit,
     warningThreshold,
     ttsProvider,
+    backendUrl,
   );
   @override
   bool operator ==(Object other) =>
@@ -4134,7 +4175,8 @@ class AppSettingsTableData extends DataClass
           other.autoNormalize == this.autoNormalize &&
           other.autoSplit == this.autoSplit &&
           other.warningThreshold == this.warningThreshold &&
-          other.ttsProvider == this.ttsProvider);
+          other.ttsProvider == this.ttsProvider &&
+          other.backendUrl == this.backendUrl);
 }
 
 class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
@@ -4147,6 +4189,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
   final Value<bool> autoSplit;
   final Value<int> warningThreshold;
   final Value<String> ttsProvider;
+  final Value<String?> backendUrl;
   const AppSettingsTableCompanion({
     this.id = const Value.absent(),
     this.themeMode = const Value.absent(),
@@ -4157,6 +4200,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
     this.autoSplit = const Value.absent(),
     this.warningThreshold = const Value.absent(),
     this.ttsProvider = const Value.absent(),
+    this.backendUrl = const Value.absent(),
   });
   AppSettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -4168,6 +4212,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
     this.autoSplit = const Value.absent(),
     this.warningThreshold = const Value.absent(),
     this.ttsProvider = const Value.absent(),
+    this.backendUrl = const Value.absent(),
   });
   static Insertable<AppSettingsTableData> custom({
     Expression<int>? id,
@@ -4179,6 +4224,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
     Expression<bool>? autoSplit,
     Expression<int>? warningThreshold,
     Expression<String>? ttsProvider,
+    Expression<String>? backendUrl,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4190,6 +4236,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
       if (autoSplit != null) 'auto_split': autoSplit,
       if (warningThreshold != null) 'warning_threshold': warningThreshold,
       if (ttsProvider != null) 'tts_provider': ttsProvider,
+      if (backendUrl != null) 'backend_url': backendUrl,
     });
   }
 
@@ -4203,6 +4250,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
     Value<bool>? autoSplit,
     Value<int>? warningThreshold,
     Value<String>? ttsProvider,
+    Value<String?>? backendUrl,
   }) {
     return AppSettingsTableCompanion(
       id: id ?? this.id,
@@ -4214,6 +4262,7 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
       autoSplit: autoSplit ?? this.autoSplit,
       warningThreshold: warningThreshold ?? this.warningThreshold,
       ttsProvider: ttsProvider ?? this.ttsProvider,
+      backendUrl: backendUrl ?? this.backendUrl,
     );
   }
 
@@ -4247,6 +4296,9 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
     if (ttsProvider.present) {
       map['tts_provider'] = Variable<String>(ttsProvider.value);
     }
+    if (backendUrl.present) {
+      map['backend_url'] = Variable<String>(backendUrl.value);
+    }
     return map;
   }
 
@@ -4261,7 +4313,8 @@ class AppSettingsTableCompanion extends UpdateCompanion<AppSettingsTableData> {
           ..write('autoNormalize: $autoNormalize, ')
           ..write('autoSplit: $autoSplit, ')
           ..write('warningThreshold: $warningThreshold, ')
-          ..write('ttsProvider: $ttsProvider')
+          ..write('ttsProvider: $ttsProvider, ')
+          ..write('backendUrl: $backendUrl')
           ..write(')'))
         .toString();
   }
@@ -8004,6 +8057,7 @@ typedef $$AppSettingsTableTableCreateCompanionBuilder =
       Value<bool> autoSplit,
       Value<int> warningThreshold,
       Value<String> ttsProvider,
+      Value<String?> backendUrl,
     });
 typedef $$AppSettingsTableTableUpdateCompanionBuilder =
     AppSettingsTableCompanion Function({
@@ -8016,6 +8070,7 @@ typedef $$AppSettingsTableTableUpdateCompanionBuilder =
       Value<bool> autoSplit,
       Value<int> warningThreshold,
       Value<String> ttsProvider,
+      Value<String?> backendUrl,
     });
 
 class $$AppSettingsTableTableFilterComposer
@@ -8069,6 +8124,11 @@ class $$AppSettingsTableTableFilterComposer
 
   ColumnFilters<String> get ttsProvider => $composableBuilder(
     column: $table.ttsProvider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get backendUrl => $composableBuilder(
+    column: $table.backendUrl,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8126,6 +8186,11 @@ class $$AppSettingsTableTableOrderingComposer
     column: $table.ttsProvider,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get backendUrl => $composableBuilder(
+    column: $table.backendUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableTableAnnotationComposer
@@ -8173,6 +8238,11 @@ class $$AppSettingsTableTableAnnotationComposer
 
   GeneratedColumn<String> get ttsProvider => $composableBuilder(
     column: $table.ttsProvider,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get backendUrl => $composableBuilder(
+    column: $table.backendUrl,
     builder: (column) => column,
   );
 }
@@ -8223,6 +8293,7 @@ class $$AppSettingsTableTableTableManager
                 Value<bool> autoSplit = const Value.absent(),
                 Value<int> warningThreshold = const Value.absent(),
                 Value<String> ttsProvider = const Value.absent(),
+                Value<String?> backendUrl = const Value.absent(),
               }) => AppSettingsTableCompanion(
                 id: id,
                 themeMode: themeMode,
@@ -8233,6 +8304,7 @@ class $$AppSettingsTableTableTableManager
                 autoSplit: autoSplit,
                 warningThreshold: warningThreshold,
                 ttsProvider: ttsProvider,
+                backendUrl: backendUrl,
               ),
           createCompanionCallback:
               ({
@@ -8245,6 +8317,7 @@ class $$AppSettingsTableTableTableManager
                 Value<bool> autoSplit = const Value.absent(),
                 Value<int> warningThreshold = const Value.absent(),
                 Value<String> ttsProvider = const Value.absent(),
+                Value<String?> backendUrl = const Value.absent(),
               }) => AppSettingsTableCompanion.insert(
                 id: id,
                 themeMode: themeMode,
@@ -8255,6 +8328,7 @@ class $$AppSettingsTableTableTableManager
                 autoSplit: autoSplit,
                 warningThreshold: warningThreshold,
                 ttsProvider: ttsProvider,
+                backendUrl: backendUrl,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
