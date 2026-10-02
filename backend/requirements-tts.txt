@@ -1,0 +1,30 @@
+# VietVoice Studio - dependencies for the local TTS sidecar
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r backend/requirements-tts.txt
+#
+# Free and keyless. Two engines are used:
+#   * edge-tts  -> speech synthesis with Microsoft's public Edge voices (MP3)
+#   * XTTS-v2   -> voice cloning from a 5-30s sample (WAV), runs on your CPU
+#
+# Only the first clone downloads the XTTS-v2 model (~1.8 GB, cached afterwards).
+# Suggest installing these into a dedicated virtualenv so the heavy ML stack
+# stays out of your system Python.
+
+# --- Speech synthesis (small, installs in seconds) ---
+edge-tts>=7.0.0
+
+# --- Voice cloning (large: torch CPU wheel is ~200 MB) ---
+# Install torch + torchaudio from the CPU index first, otherwise pip pulls CUDA:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2
+torchaudio>=2.2
+# Prebuilt fork of Coqui TTS. Upstream `TTS` needs a C++ build toolchain on
+# Windows; this fork ships wheels and exposes the same `TTS` module.
+coqui-tts>=0.25.0
+# Pinned on purpose: Coqui TTS 0.27 breaks on transformers 5.x, and from torch
+# 2.9 it also needs torchcodec for audio IO.
+transformers==4.57.1
+huggingface_hub>=0.34,<1.0
+torchcodec
+librosa>=0.11.0
+soundfile>=0.12.1

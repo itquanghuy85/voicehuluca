@@ -1,0 +1,79 @@
+class AppConstants {
+  AppConstants._();
+
+  static const String appName = 'VietVoice Studio';
+  static const String appVersion = '1.0.0';
+
+  static const int maxScriptLength = 5000;
+  static const int minScriptLength = 1;
+  static const int maxFileNameLength = 100;
+  static const int maxConcurrentGenerations = 3;
+  static const int defaultAudioBitrate = 128000;
+  static const int maxAudioFileSizeBytes = 50 * 1024 * 1024;
+  static const int audioChunkSizeBytes = 8192;
+
+  static const Duration apiTimeout = Duration(seconds: 30);
+  static const Duration connectionTimeout = Duration(seconds: 10);
+  static const Duration generationTimeout = Duration(minutes: 5);
+  static const Duration splashDuration = Duration(seconds: 2);
+  static const Duration debounceDuration = Duration(milliseconds: 300);
+  static const Duration snackBarDuration = Duration(seconds: 4);
+
+  static const List<String> supportedAudioFormats = [
+    'mp3',
+    'wav',
+    'ogg',
+    'm4a',
+  ];
+  static const List<String> supportedExportFormats = ['mp3', 'wav', 'ogg'];
+  static const List<String> supportedImportFormats = ['txt', 'md', 'docx'];
+
+  static const List<String> vietnameseVoiceIds = [
+    'vn_female_01',
+    'vn_male_01',
+    'vn_female_02',
+    'vn_male_02',
+    'vn_female_03',
+    'vn_male_03',
+  ];
+
+  static const List<double> supportedSpeechRates = [
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    2.0,
+  ];
+
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://api.vietvoice.studio/v1',
+  );
+  static const String websocketUrl = 'wss://stream.vietvoice.studio';
+
+  /// Provider used until the user picks another one in Settings.
+  static const String defaultTtsProvider = 'google';
+
+  /// Provider that supports cloning and is used as a paid fallback.
+  static const String fallbackTtsProvider = 'elevenlabs';
+
+  static const String secureStorageKeyApiToken = 'api_token';
+  static const String secureStorageKeyRefreshToken = 'refresh_token';
+  static const String secureStorageKeyUserId = 'user_id';
+  static const String secureStorageKeyClonedVoiceData = 'cloned_voice_data';
+
+  static const String prefsKeyThemeMode = 'theme_mode';
+  static const String prefsKeyLanguage = 'language';
+  static const String prefsKeyDefaultVoiceId = 'default_voice_id';
+  static const String prefsKeyDefaultSpeechRate = 'default_speech_rate';
+  static const String prefsKeyAutoPlay = 'auto_play';
+  static const String prefsKeyDownloadOnGenerate = 'download_on_generate';
+
+  static const int maxRetryAttempts = 3;
+  static const Duration retryDelay = Duration(seconds: 2);
+
+  static const double vietnameseCharsPerSecond = 15.0;
+  static const double minEstimatedDurationSeconds = 0.5;
+  static const double maxEstimatedDurationSeconds = 600.0;
+}
