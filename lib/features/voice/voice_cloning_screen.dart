@@ -100,9 +100,17 @@ class _VoiceCloningScreenState extends ConsumerState<VoiceCloningScreen>
               ),
             if (state.status == CloningStatus.success)
               _SuccessOverlay(
-                onDone: () {
+                onDone: () async {
+                  // The new clone only lives on the server, so pull it into the
+                  // list before leaving: otherwise "Giọng của tôi" stays stale
+                  // until the next launch or a manual refresh.
+                  await ref
+                      .read(voiceListProvider.notifier)
+                      .loadVoices(isRefresh: true);
                   ref.read(cloningProvider.notifier).reset();
-                  Navigator.of(context).pop();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
                 },
               ),
           ],
