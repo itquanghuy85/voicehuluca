@@ -65,7 +65,6 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   @override
   void initState() {
     super.initState();
-    _nameController.text = AppStrings.recordVoiceNameHint;
   }
 
   @override
@@ -96,8 +95,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _hasSample &&
       !_isSaving &&
       _elapsed >= _minDuration &&
-      _nameController.text.trim().isNotEmpty &&
-      !_nameController.text.trim().startsWith('Ví dụ');
+      _nameController.text.trim().isNotEmpty;
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
@@ -182,8 +180,8 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
     final path = _recordingPath;
     if (path == null) return;
 
-    final name = _nameController.text.trim();
-    if (name.isEmpty || name.startsWith('Ví dụ')) {
+    final String name = _nameController.text.trim();
+    if (name.isEmpty) {
       setState(() => _error = AppStrings.recordVoiceNameRequired);
       return;
     }
@@ -313,10 +311,14 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                 TextField(
                   controller: _nameController,
                   enabled: !_isSaving,
+                  textCapitalization: TextCapitalization.words,
                   style: AppTypography.body.copyWith(color: colors.textPrimary),
                   decoration: InputDecoration(
                     labelText: AppStrings.recordVoiceNameLabel,
                     hintText: AppStrings.recordVoiceNameHint,
+                    errorText: _error == AppStrings.recordVoiceNameRequired
+                        ? _error
+                        : null,
                     border: OutlineInputBorder(
                       borderRadius: AppRadius.mediumAll,
                     ),
