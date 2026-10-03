@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_huluca/core/audio/recording_analyzer.dart';
 
-/// Builds a 16-bit PCM mono WAV the way the record plugin writes it.
+/// Builds a PCM WAV the way the record plugin writes it, at any sample width so
+/// the analyzer can be checked against every shape a device may return.
 /// [speechRatio] is the share of the clip that carries the tone, so a test can
 /// model a quiet voice separated by long pauses.
 Uint8List buildWav({
@@ -12,9 +13,12 @@ Uint8List buildWav({
   int sampleRate = 22050,
   int seconds = 5,
   double speechRatio = 1.0,
+  int bitsPerSample = 16,
+  int formatTag = 1,
 }) {
+  final bytesPerSample = bitsPerSample ~/ 8;
   final sampleCount = sampleRate * seconds;
-  final dataLength = sampleCount * 2;
+  final dataLength = sampleCount * bytesPerSample;
   final bytes = ByteData(44 + dataLength);
 
   void writeAscii(int offset, String value) {
@@ -28,25 +32,42 @@ Uint8List buildWav({
   writeAscii(8, 'WAVE');
   writeAscii(12, 'fmt ');
   bytes.setUint32(16, 16, Endian.little);
-  bytes.setUint16(20, 1, Endian.little); // PCM
+  bytes.setUint16(20, formatTag, Endian.little);
   bytes.setUint16(22, 1, Endian.little); // mono
   bytes.setUint32(24, sampleRate, Endian.little);
-  bytes.setUint32(28, sampleRate * 2, Endian.little);
-  bytes.setUint16(32, 2, Endian.little);
-  bytes.setUint16(34, 16, Endian.little);
+  bytes.setUint32(28, sampleRate * bytesPerSample, Endian.little);
+  bytes.setUint16(32, bytesPerSample, Endian.little);
+  bytes.setUint16(34, bitsPerSample, Endian.little);
   writeAscii(36, 'data');
   bytes.setUint32(40, dataLength, Endian.little);
+
+  void writeSample(int index, double value) {
+    final offset = 44 + index * bytesPerSample;
+    switch (bitsPerSample) {
+      case 8:
+        bytes.setUint8(offset, (value * 127 + 128).round());
+      case 16:
+        bytes.setInt16(offset, (value * 32767).round(), Endian.little);
+      case 24:
+        final raw = (value * 8388607).round() & 0xFFFFFF;
+        bytes.setUint8(offset, raw & 0xFF);
+        bytes.setUint8(offset + 1, (raw >> 8) & 0xFF);
+        bytes.setUint8(offset + 2, (raw >> 16) & 0xFF);
+      case 32:
+        if (formatTag == 3) {
+          bytes.setFloat32(offset, value, Endian.little);
+        } else {
+          bytes.setInt32(offset, (value * 2147483647).round(), Endian.little);
+        }
+    }
+  }
 
   final speaking = (sampleCount * speechRatio).round();
   final random = Random(7);
   for (var i = 0; i < sampleCount; i++) {
     final noise = (random.nextDouble() - 0.5) * 0.002;
     final wave = i < speaking ? sin(2 * pi * 220 * i / sampleRate) : 0.0;
-    bytes.setInt16(
-      44 + i * 2,
-      ((wave + noise) * amplitude * 32767).round(),
-      Endian.little,
-    );
+    writeSample(i, (wave + noise) * amplitude);
   }
   return bytes.buffer.asUint8List();
 }
@@ -99,14 +120,46 @@ void main() {
       );
     });
 
-    test('a non 16-bit file is reported as a format problem', () {
-      final bytes = buildWav(amplitude: 0.3);
-      ByteData.sublistView(bytes).setUint16(34, 24, Endian.little);
+    test('24-bit PCM is measured, not rejected', () {
+      final bytes = buildWav(amplitude: 0.3, bitsPerSample: 24);
+      final quality = analyzeWavBytes(bytes);
 
-      expect(
-        analyzeWavBytes(bytes).status,
-        RecordingStatus.unsupportedFormat,
+      expect(quality.status, RecordingStatus.ok);
+      expect(quality.hasSpeech, isTrue);
+      expect(quality.peak, closeTo(0.3, 0.01));
+      expect(quality.detected, contains('24-bit'));
+    });
+
+    test('32-bit float PCM is measured, not rejected', () {
+      final bytes = buildWav(
+        amplitude: 0.3,
+        bitsPerSample: 32,
+        formatTag: 3,
       );
+      final quality = analyzeWavBytes(bytes);
+
+      expect(quality.hasSpeech, isTrue);
+      expect(quality.detected, contains('float32'));
+    });
+
+    test('a compressed stream is refused by name', () {
+      final bytes = buildWav(amplitude: 0.3);
+      ByteData.sublistView(bytes).setUint16(20, 0x00FF, Endian.little);
+
+      final quality = analyzeWavBytes(bytes);
+
+      expect(quality.status, RecordingStatus.unsupportedFormat);
+      expect(quality.detected, contains('0xff'));
+    });
+
+    test('a file that is not a RIFF container is named in the message', () {
+      final bytes = buildWav(amplitude: 0.3);
+      bytes.setRange(0, 4, 'ftyp'.codeUnits);
+
+      final quality = analyzeWavBytes(bytes);
+
+      expect(quality.status, RecordingStatus.notRiff);
+      expect(quality.detected, contains('ftyp'));
     });
 
     test('garbage input does not throw', () {

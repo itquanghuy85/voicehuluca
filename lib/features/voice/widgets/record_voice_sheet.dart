@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voice_huluca/core/app/app_settings_opener.dart';
 import 'package:voice_huluca/core/audio/recording_analyzer.dart';
+import 'package:voice_huluca/core/audio/wav_converter.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
@@ -179,14 +180,22 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       final quality = await _analyzeSample(path);
       debugPrint('[voice-record] $path -> $quality');
       if (!mounted) return;
-      setState(() {
-        if (!quality.hasSpeech) {
+      if (!quality.hasSpeech) {
+        setState(() {
           _recordingPath = null;
           _elapsed = Duration.zero;
-          _error = _messageFor(quality.status);
-          return;
-        }
-        _recordingPath = path;
+          _error = _messageFor(quality.status, quality.detected);
+        });
+        return;
+      }
+
+      // The recorder may hand back 24-bit or float WAV; the XTTS engine reads
+      // integer PCM only, so normalise before anything else touches the file.
+      final usable = await WavConverter.ensurePcm16(File(path));
+      debugPrint('[voice-record] usable sample: ${usable.path}');
+      if (!mounted) return;
+      setState(() {
+        _recordingPath = usable.path;
         _elapsed = quality.duration > _elapsed ? quality.duration : _elapsed;
         _error = null;
       });
@@ -201,12 +210,16 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   }
 
   /// A broken recording must not be blamed on the microphone, so each analyzer
-  /// outcome gets its own message.
-  String _messageFor(RecordingStatus status) => switch (status) {
+  /// outcome gets its own message. [detected] names what the file really was so
+  /// the user can tell a format problem from a hardware one.
+  String _messageFor(RecordingStatus status, String detected) => switch (status) {
     RecordingStatus.unreadable ||
     RecordingStatus.malformedHeader ||
     RecordingStatus.missingData => AppStrings.recordVoiceUnreadable,
-    RecordingStatus.unsupportedFormat => AppStrings.recordVoiceBadFormat,
+    RecordingStatus.notRiff => AppStrings.recordVoiceNotWav(detected),
+    RecordingStatus.unsupportedFormat => AppStrings.recordVoiceBadFormat(
+      detected,
+    ),
     RecordingStatus.empty => AppStrings.recordVoiceEmpty,
     _ => AppStrings.recordVoiceSilent,
   };

@@ -2211,8 +2211,13 @@ class AppStrings {
       'Không nghe thấy giọng nói trong bản ghi. Hãy kiểm tra micrô rồi ghi lại, đọc to và rõ trong khoảng 5-30 giây.';
   static const String recordVoiceUnreadable =
       'Không đọc được bản ghi vừa tạo. Hãy ghi lại, nếu vẫn bị lỗi này hãy mở lại ứng dụng.';
-  static const String recordVoiceBadFormat =
-      'Bản ghi không phải WAV 16-bit nên không dùng được cho giọng mới. Hãy ghi lại.';
+  static String recordVoiceNotWav(String detected) => detected.isEmpty
+      ? 'Máy đã ghi ra tệp không phải WAV. Hãy ghi lại.'
+      : 'Máy đã ghi ra tệp "$detected" thay vì WAV. Hãy ghi lại.';
+
+  static String recordVoiceBadFormat(String detected) => detected.isEmpty
+      ? 'Bản ghi không phải WAV 16-bit nên không dùng được cho giọng mới. Hãy ghi lại.'
+      : 'Bản ghi là "$detected" thay vì WAV 16-bit nên không dùng được cho giọng mới. Hãy ghi lại.';
   static const String recordVoiceEmpty =
       'Bản ghi không có dữ liệu âm thanh. Hãy kiểm tra micrô rồi ghi lại.';
   static const String recordVoiceTooLong = 'Đã đủ 30 giây, hãy dừng ghi.';
