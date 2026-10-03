@@ -41,6 +41,7 @@ class RecordingQuality {
     required this.peakWindowRms,
     required this.status,
     this.detected = '',
+    this.header = '',
   });
 
   final Duration duration;
@@ -60,6 +61,10 @@ class RecordingQuality {
 
   /// What the file header said it was, for the error message and the log.
   final String detected;
+
+  /// Hex of the first bytes of the file. A WAV that fails to parse is almost
+  /// always a container this code did not expect, and the raw bytes settle it.
+  final String header;
 
   bool get hasSpeech => status == RecordingStatus.ok;
 
@@ -96,13 +101,15 @@ class RecordingQuality {
         peakWindowRms: peakWindowRms,
         status: value,
         detected: detected ?? this.detected,
+        header: header,
       );
 
   @override
   String toString() =>
       'RecordingQuality(${status.name}, ${duration.inMilliseconds}ms, '
       'peak=${peak.toStringAsFixed(4)}, rms=${rms.toStringAsFixed(4)}, '
-      'window=${peakWindowRms.toStringAsFixed(4)}, detected="$detected")';
+      'window=${peakWindowRms.toStringAsFixed(4)}, detected="$detected", '
+      'header=$header)';
 }
 
 /// Length of the sliding window used to find the loudest part of the sample.
@@ -124,30 +131,50 @@ RecordingQuality analyzeWavFile(File file) {
 WavLayout? parseWav(Uint8List bytes) => WavLayout.parse(bytes);
 
 RecordingQuality analyzeWavBytes(Uint8List bytes) {
+  final dump = _hex(bytes);
+
   if (bytes.length < 44) {
-    return RecordingQuality.silent.withStatus(
-      RecordingStatus.malformedHeader,
-      '${bytes.length} byte',
+    return RecordingQuality(
+      duration: Duration.zero,
+      peak: 0,
+      rms: 0,
+      peakWindowRms: 0,
+      status: RecordingStatus.malformedHeader,
+      detected: '${bytes.length} byte',
+      header: dump,
     );
   }
 
   final layout = WavLayout.parse(bytes);
   if (layout == null) {
-    return RecordingQuality.silent.withStatus(
-      RecordingStatus.notRiff,
-      _magic(bytes),
+    return RecordingQuality(
+      duration: Duration.zero,
+      peak: 0,
+      rms: 0,
+      peakWindowRms: 0,
+      status: RecordingStatus.notRiff,
+      detected: _magic(bytes),
+      header: dump,
     );
   }
 
   final label = layout.describe();
+
+  RecordingQuality reject(RecordingStatus status) => RecordingQuality(
+    duration: Duration.zero,
+    peak: 0,
+    rms: 0,
+    peakWindowRms: 0,
+    status: status,
+    detected: label,
+    header: dump,
+  );
+
   if (!layout.isDecodable ||
       layout.channels <= 0 ||
       layout.sampleRate <= 0 ||
       layout.frameSize == 0) {
-    return RecordingQuality.silent.withStatus(
-      RecordingStatus.unsupportedFormat,
-      label,
-    );
+    return reject(RecordingStatus.unsupportedFormat);
   }
 
   final frames = math.min(
@@ -155,7 +182,7 @@ RecordingQuality analyzeWavBytes(Uint8List bytes) {
     (bytes.length - layout.dataOffset) ~/ layout.frameSize,
   );
   if (frames <= 0) {
-    return RecordingQuality.silent.withStatus(RecordingStatus.empty, label);
+    return reject(RecordingStatus.empty);
   }
 
   final view = ByteData.sublistView(bytes);
@@ -204,6 +231,7 @@ RecordingQuality analyzeWavBytes(Uint8List bytes) {
     peakWindowRms: peakWindowRms,
     status: RecordingStatus.ok,
     detected: label,
+    header: dump,
   );
 
   final audible =
@@ -312,6 +340,9 @@ class WavLayout {
       } else if (id == 'data' && dataOffset < 0) {
         dataOffset = body;
         dataLength = math.min(size, bytes.length - body);
+        // Recorders that stream leave the size field at 0 and only patch it on
+        // close; if it says nothing, trust the bytes that are actually there.
+        if (dataLength <= 0) dataLength = bytes.length - body;
       }
       if (fmtOffset >= 0 && dataOffset >= 0) break;
       offset = body + size + (size.isOdd ? 1 : 0);
@@ -322,7 +353,14 @@ class WavLayout {
     var formatTag = _readInt16(bytes, fmtOffset);
     final channels = _readInt16(bytes, fmtOffset + 2);
     final sampleRate = _readInt32(bytes, fmtOffset + 4);
-    final bitsPerSample = _readInt16(bytes, fmtOffset + 14);
+    final blockAlign = _readInt16(bytes, fmtOffset + 12);
+    var bitsPerSample = _readInt16(bytes, fmtOffset + 14);
+
+    // Some writers leave wBitsPerSample at 0 and expect the reader to derive it
+    // from the block alignment.
+    if (bitsPerSample <= 0 && channels > 0 && blockAlign > 0) {
+      bitsPerSample = blockAlign ~/ channels * 8;
+    }
 
     // WAVE_FORMAT_EXTENSIBLE keeps the real tag at the head of the sub-format
     // GUID, 24 bytes into the chunk body.
@@ -347,6 +385,17 @@ String _magic(Uint8List bytes) {
       ? String.fromCharCodes(bytes.sublist(0, 4))
       : '${bytes.length} byte';
   return 'not a WAV file (starts with "$head")';
+}
+
+/// Hex of the first 48 bytes: enough to read every standard header field by eye.
+String _hex(Uint8List bytes) {
+  final take = math.min(48, bytes.length);
+  final buffer = StringBuffer();
+  for (var i = 0; i < take; i++) {
+    buffer.write(bytes[i].toRadixString(16).padLeft(2, '0'));
+    buffer.write(i.isOdd ? ' ' : '');
+  }
+  return buffer.toString().trim();
 }
 
 int _readInt16(Uint8List bytes, int offset) {

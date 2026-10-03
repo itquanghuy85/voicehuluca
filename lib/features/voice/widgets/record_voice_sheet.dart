@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -9,28 +10,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voice_huluca/core/app/app_settings_opener.dart';
 import 'package:voice_huluca/core/audio/recording_analyzer.dart';
+import 'package:voice_huluca/core/audio/voice_sample_config.dart';
 import 'package:voice_huluca/core/audio/wav_converter.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
 import 'package:voice_huluca/features/voice/voice_provider.dart';
 
-/// Recording format expected by the local XTTS pipeline: 22 kHz mono WAV.
-/// [autoGain] lifts quiet voices before the loudness check runs, so a user who
-/// simply speaks softly is not told their microphone is broken.
-const RecordConfig recordVoiceConfig = RecordConfig(
-  encoder: AudioEncoder.wav,
-  sampleRate: 22050,
-  numChannels: 1,
-  autoGain: true,
-);
-
-const Duration _minDuration = Duration(seconds: 5);
-const Duration _maxDuration = Duration(seconds: 30);
-
-/// Sample length the sheet asks the user for (XTTS works best in this range).
-const Duration recordVoiceMinDuration = _minDuration;
-const Duration recordVoiceMaxDuration = _maxDuration;
+const Duration _minDuration = recordVoiceMinDuration;
+const Duration _maxDuration = recordVoiceMaxDuration;
 
 /// Opens the sheet. Resolves to true when a new voice was saved.
 Future<bool> showRecordVoiceSheet(BuildContext context, WidgetRef ref) async {
@@ -66,6 +54,13 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   bool _isRecording = false;
   bool _isSaving = false;
   bool _needsMicPermission = false;
+
+  /// Loudest level seen while recording, in dBFS (0 is full scale, -160 silent).
+  double _peakDb = -160;
+
+  /// Below this the microphone heard nothing but room tone. Speech at arm's
+  /// length peaks around -20 dBFS, so this only trips on real silence.
+  static const double _minAudibleDb = -40;
 
   @override
   void initState() {
@@ -116,6 +111,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _needsMicPermission = false;
       _elapsed = Duration.zero;
       _recordingPath = null;
+      _peakDb = -160;
     });
 
     final hasPermission = await _recorder.hasPermission();
@@ -154,10 +150,25 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
         return;
       }
       setState(() => _elapsed += const Duration(milliseconds: 200));
+      await _trackLevel();
       if (_elapsed >= _maxDuration) {
         await _stopRecording();
       }
     });
+  }
+
+  /// Remembers the loudest level the recorder saw, in dBFS. iOS ignores the WAV
+  /// request and returns AAC in an M4A container, so the recorded file cannot
+  /// always be measured on the phone; the live level answers "did anyone speak"
+  /// whatever the recorder decided to write.
+  Future<void> _trackLevel() async {
+    try {
+      final amplitude = await _recorder.getAmplitude();
+      final loudest = math.max(amplitude.current, amplitude.max);
+      if (loudest > _peakDb) _peakDb = loudest;
+    } catch (_) {
+      // Amplitude polling may fail between ticks; keep recording.
+    }
   }
 
   Future<void> _stopRecording() async {
@@ -178,9 +189,22 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       // Refuse a silent sample here: cloning it produces a voice the user
       // cannot hear and cannot use.
       final quality = await _analyzeSample(path);
-      debugPrint('[voice-record] $path -> $quality');
+      debugPrint('[voice-record] $path -> $quality | peakDb=$_peakDb');
+
+      final heardSomething = _peakDb > _minAudibleDb;
+      // A file the phone can parse is judged by the samples; anything else (an
+      // M4A from iOS) is judged by the live level and left for the sidecar to
+      // decode.
+      final usable = switch (quality.status) {
+        RecordingStatus.ok ||
+        RecordingStatus.silent => quality.hasSpeech || heardSomething,
+        RecordingStatus.notRiff ||
+        RecordingStatus.unsupportedFormat => heardSomething,
+        _ => false,
+      };
+
       if (!mounted) return;
-      if (!quality.hasSpeech) {
+      if (!usable) {
         setState(() {
           _recordingPath = null;
           _elapsed = Duration.zero;
@@ -189,14 +213,14 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
         return;
       }
 
-      // The recorder may hand back 24-bit or float WAV; the XTTS engine reads
-      // integer PCM only, so normalise before anything else touches the file.
-      final usable = await WavConverter.ensurePcm16(File(path));
-      debugPrint('[voice-record] usable sample: ${usable.path}');
+      // The recorder may hand back 24-bit or float WAV; XTTS reads integer PCM
+      // only, so normalise when the phone could parse the file at all.
+      final usablePath = await WavConverter.ensurePcm16(File(path));
+      debugPrint('[voice-record] usable sample: ${usablePath.path}');
       if (!mounted) return;
       setState(() {
-        _recordingPath = usable.path;
-        _elapsed = quality.duration > _elapsed ? quality.duration : _elapsed;
+        _recordingPath = usablePath.path;
+        if (quality.duration > _elapsed) _elapsed = quality.duration;
         _error = null;
       });
     } catch (error) {

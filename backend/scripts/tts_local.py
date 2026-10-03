@@ -34,7 +34,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 VOICES_DIR = Path(
     os.environ.get(
@@ -46,6 +46,10 @@ CLONE_PREFIX = "clone:"
 DEFAULT_CLONE_LANGUAGE = "vi"
 MIN_SAMPLE_SECONDS = 5.0
 MAX_SAMPLE_SECONDS = 30.0
+# XTTS-v2 works in 24 kHz and reads its reference through ``soundfile``, which
+# only understands linear PCM. Whatever the phone recorded gets decoded to this
+# rate before anything else looks at it.
+CLONE_SAMPLE_RATE = 24000
 # The public Edge endpoint sometimes answers with no audio when requests arrive
 # in bursts; a few retries turn that into a non-event for the user.
 EDGE_ATTEMPTS = 3
@@ -185,6 +189,110 @@ def audio_duration_seconds(path: Path) -> float:
         frames = handle.getnframes()
         rate = handle.getframerate() or 1
         return frames / float(rate)
+
+
+def is_pcm_wav(path: Path) -> bool:
+    """True when ``wave`` can already read the file, i.e. plain PCM WAV."""
+    import wave
+
+    try:
+        with wave.open(str(path), "rb") as handle:
+            return handle.getcomptype() == "NONE" and handle.getsampwidth() == 2
+    except Exception:
+        return False
+
+
+def _decode_to_mono(path: Path) -> Tuple[Any, int]:
+    """Return ``(float32 mono samples, sample_rate)`` for any audio container.
+
+    ``torchaudio`` goes through torchcodec/FFmpeg and reads AAC in an M4A
+    container, which is what iOS actually produces even when WAV is asked for.
+    ``soundfile`` is the fallback for plain WAV and FLAC.
+    """
+    import numpy as np
+
+    failures: List[str] = []
+    try:
+        import torch
+        import torchaudio
+
+        waveform, rate = torchaudio.load(str(path))
+        mono = waveform.to(torch.float32).mean(dim=0).numpy()
+        return np.ascontiguousarray(mono, dtype="float32"), int(rate)
+    except Exception as error:  # noqa: BLE001 - any decoder failure is a fallback
+        failures.append(f"torchaudio: {_brief(error)}")
+
+    try:
+        import soundfile as sf
+
+        data, rate = sf.read(str(path), dtype="float32", always_2d=True)
+        return np.ascontiguousarray(data.mean(axis=1), dtype="float32"), int(rate)
+    except Exception as error:  # noqa: BLE001
+        failures.append(f"soundfile: {_brief(error)}")
+
+    raise SidecarError(
+        "InvalidSample",
+        "Không đọc được file âm thanh. Hãy ghi lại bằng định dạng WAV, hoặc cài "
+        "ffmpeg để đọc được AAC/MP3. (" + "; ".join(failures) + ")",
+    )
+
+
+def _brief(error: Exception, limit: int = 160) -> str:
+    """One line of a decoder failure, without the multi-paragraph traceback."""
+    text = " ".join(str(error).split())
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def normalize_sample(path: Path) -> Path:
+    """Rewrite any recording in place as mono 16-bit PCM WAV.
+
+    The phone decides the container, not us: iOS returns AAC in an M4A file and
+    Android varies between 16 and 24-bit PCM. ``wave`` and ``soundfile`` read
+    PCM only, so the upload is decoded once, here, where a decoder exists.
+    """
+    if is_pcm_wav(path):
+        return path
+
+    import numpy as np
+    import soundfile as sf
+
+    samples, rate = _decode_to_mono(path)
+    if samples.size == 0 or rate <= 0:
+        raise SidecarError("InvalidSample", "File âm thanh rỗng.")
+
+    if rate != CLONE_SAMPLE_RATE:
+        samples = _resample(samples, rate, CLONE_SAMPLE_RATE)
+
+    sf.write(str(path), samples, CLONE_SAMPLE_RATE, subtype="PCM_16")
+    log(
+        f"Đã chuyển mẫu âm thanh sang WAV {CLONE_SAMPLE_RATE}Hz 16-bit "
+        f"(mẫu gốc {rate}Hz)."
+    )
+    return path
+
+
+def _resample(samples: Any, source_rate: int, target_rate: int) -> Any:
+    """Resample mono float32 audio, preferring torchaudio when it is installed."""
+    import numpy as np
+
+    if source_rate == target_rate:
+        return samples
+
+    try:
+        import torch
+        import torchaudio.functional as F
+
+        waveform = torch.from_numpy(np.ascontiguousarray(samples, dtype="float32"))
+        resampled = F.resample(waveform, source_rate, target_rate)
+        return np.ascontiguousarray(resampled.numpy(), dtype="float32")
+    except Exception:
+        # Linear interpolation is not a great anti-aliasing filter, but a voice
+        # reference does not need one and numpy is always available.
+        count = max(1, int(round(samples.size * target_rate / source_rate)))
+        positions = np.linspace(0, samples.size - 1, count, dtype="float64")
+        return np.interp(positions, np.arange(samples.size), samples).astype(
+            "float32"
+        )
 
 
 def validate_sample(path: Path) -> None:
@@ -496,6 +604,7 @@ def command_clone(params: Dict[str, Any]) -> Dict[str, Any]:
         raise SidecarError("ValidationError", "Thiếu file âm thanh mẫu.")
 
     sample = Path(str(raw_path))
+    normalize_sample(sample)
     validate_sample(sample)
 
     language = (params.get("language") or DEFAULT_CLONE_LANGUAGE).strip().lower()

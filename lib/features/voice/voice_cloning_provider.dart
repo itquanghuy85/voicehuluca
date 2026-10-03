@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:voice_huluca/core/audio/voice_sample_config.dart';
+import 'package:voice_huluca/core/audio/wav_converter.dart';
 import 'package:voice_huluca/core/constants/app_constants.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/models/voice.dart';
@@ -77,8 +79,10 @@ final cloningProvider = NotifierProvider<CloningNotifier, CloningState>(
 );
 
 class CloningNotifier extends Notifier<CloningState> {
-  static const Duration maxRecordingDuration = Duration(minutes: 2);
-  static const Duration minRecordingDuration = Duration(seconds: 10);
+  // The sidecar rejects samples outside 5-30s, so the screen has to stop at the
+  // same bounds instead of letting the user record something that will fail.
+  static const Duration maxRecordingDuration = recordVoiceMaxDuration;
+  static const Duration minRecordingDuration = recordVoiceMinDuration;
   static const int maxWaveformSamples = 60;
   static const Duration waveformInterval = Duration(milliseconds: 100);
 
@@ -112,9 +116,9 @@ class CloningNotifier extends Notifier<CloningState> {
       final directory = await getTemporaryDirectory();
       final filePath = p.join(
         directory.path,
-        'voice_clone_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        'voice_clone_${DateTime.now().millisecondsSinceEpoch}.wav',
       );
-      await _recorder.start(const RecordConfig(), path: filePath);
+      await _recorder.start(recordVoiceConfig, path: filePath);
       state = state.copyWith(
         status: CloningStatus.recording,
         recordingDuration: Duration.zero,
@@ -251,10 +255,12 @@ class CloningNotifier extends Notifier<CloningState> {
     );
     _startProgressAnimation();
     try {
+      // Picked files may be 24-bit or float WAV; the engine reads integer PCM.
+      final sample = await WavConverter.ensurePcm16(File(audioPath));
       final voice = await _tts.cloneVoice(
         name: name.trim(),
         description: transcript?.trim() ?? '',
-        audioFiles: [File(audioPath)],
+        audioFiles: [sample],
         language: 'vi',
       );
       _progressTimer?.cancel();

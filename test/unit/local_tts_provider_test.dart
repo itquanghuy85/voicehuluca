@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:record/record.dart';
+import 'package:voice_huluca/core/audio/voice_sample_config.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart'
     hide Voice;
@@ -19,7 +20,6 @@ import 'package:voice_huluca/data/services/tts_provider.dart';
 import 'package:voice_huluca/data/services/tts_provider_registry.dart';
 import 'package:voice_huluca/domain/entities/tts_request.dart';
 import 'package:voice_huluca/domain/entities/tts_response.dart';
-import 'package:voice_huluca/features/voice/widgets/record_voice_sheet.dart';
 
 const String _baseUrl = 'https://backend.test/v1';
 

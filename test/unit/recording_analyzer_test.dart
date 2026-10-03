@@ -162,6 +162,27 @@ void main() {
       expect(quality.detected, contains('ftyp'));
     });
 
+    test('a data chunk with no size is measured from the bytes present', () {
+      final bytes = buildWav(amplitude: 0.3);
+      // Recorders that stream leave this at 0 until the file is closed.
+      ByteData.sublistView(bytes).setUint32(40, 0, Endian.little);
+
+      final quality = analyzeWavBytes(bytes);
+
+      expect(quality.hasSpeech, isTrue);
+      expect(quality.duration.inSeconds, 5);
+    });
+
+    test('a zero bits-per-sample is derived from the block alignment', () {
+      final bytes = buildWav(amplitude: 0.3);
+      ByteData.sublistView(bytes).setUint16(34, 0, Endian.little);
+
+      final quality = analyzeWavBytes(bytes);
+
+      expect(quality.detected, contains('16-bit'));
+      expect(quality.hasSpeech, isTrue);
+    });
+
     test('garbage input does not throw', () {
       expect(analyzeWavBytes(Uint8List(0)).hasSpeech, isFalse);
       expect(
