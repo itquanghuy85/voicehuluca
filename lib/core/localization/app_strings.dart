@@ -322,6 +322,13 @@ class AppStrings {
       'Không tìm thấy backend nào. Hãy kiểm tra máy chủ đã bật và cùng một mạng Wi-Fi.';
   static const String settingsBackendScanNoAddress =
       'Không lấy được địa chỉ IP của máy. Hãy nhập địa chỉ thủ công.';
+  static const String settingsBackendScanLocalNetwork =
+      'Ứng dụng cần quyền Mạng nội bộ để tìm máy chủ trong Wi-Fi. Nếu đã từng từ chối, mở Cài đặt → VietVoice Studio → Mạng nội bộ. Bạn vẫn có thể nhập IP thủ công ở ô trên.';
+  static const String settingsBackendScanIfaceReport =
+      'Giao diện mạng: {0}';
+  static const String settingsBackendScanTried = 'Đã dò quanh {0}';
+  static const String settingsBackendScanManualHint =
+      'Nhập tay http://192.168.1.20:3000/v1 cũng dùng được.';
   static const String settingsBackendScanTitle = 'Máy chủ trong mạng LAN';
   static const String settingsBackendScanHint = 'Chạm để dùng máy chủ này';
   static const String settingsBackendCheck = 'Kiểm tra';

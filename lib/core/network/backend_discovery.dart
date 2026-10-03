@@ -57,37 +57,76 @@ class LanBackendScanner {
     return false;
   }
 
-  /// Interface prefixes that identify Wi-Fi per platform. Android names it
-  /// `wlan0`, iOS names it `en0` and the simulator mirrors the Mac.
+  /// Interface name prefixes that usually mean Wi-Fi. Android names it `wlan0`,
+  /// iOS and macOS name it `en0`, a wired desktop names it `eth0`.
+  ///
+  /// This is a preference, never a gate: see [localAddresses].
   static const List<String> wifiInterfacePrefixes = [
     'wlan',
     'wi-fi',
     'en',
+    'eth',
   ];
 
   /// The device's own address, which may be the server when the phone is on the
   /// same machine as the backend (emulators, single-PC setups).
   ///
-  /// Interface names differ per platform (`wlan0` on Android, `en0` on iOS), so
-  /// the address itself is the only reliable signal: anything that is not
-  /// private IPv4 belongs to a cell network or a VPN and cannot host the
-  /// backend.
+  /// Interface names are a platform detail that changes without notice
+  /// (`wlan0` on Android, `en0` on iOS), and gating on them made the scan
+  /// return nothing at all on iOS. Private IPv4 is the only signal that
+  /// matters, so names only decide which addresses are tried first.
   static Future<List<String>> localAddresses() async {
+    final interfaces = await _interfaces();
+    return selectLocalAddresses({
+      for (final iface in interfaces)
+        iface.name: [
+          for (final address in iface.addresses) address.address,
+        ],
+    });
+  }
+
+  /// Picks the addresses to scan around, from interface name to IPv4 addresses.
+  ///
+  /// Wi-Fi-like interfaces win when they have a private address, otherwise every
+  /// private address is used: an unknown interface name must never be able to
+  /// hide the LAN, which is exactly what happened on iOS.
+  static List<String> selectLocalAddresses(
+    Map<String, List<String>> addressesByInterface,
+  ) {
+    final preferred = <String>[];
+    final fallback = <String>[];
+    for (final entry in addressesByInterface.entries) {
+      final name = entry.key.toLowerCase();
+      final looksLikeWifi = wifiInterfacePrefixes.any(name.startsWith);
+      for (final address in entry.value) {
+        if (!isPrivate(address)) continue;
+        (looksLikeWifi ? preferred : fallback).add(address);
+      }
+    }
+    return preferred.isNotEmpty ? preferred : fallback;
+  }
+
+  /// What the platform actually reported, so a failed scan can explain itself
+  /// instead of asking the user to guess.
+  static Future<String> interfaceReport() async {
+    final interfaces = await _interfaces();
+    if (interfaces.isEmpty) {
+      return 'khong co IPv4 nao';
+    }
+    return interfaces
+        .map(
+          (iface) =>
+              '${iface.name}=${iface.addresses.map((a) => a.address).join(',')}',
+        )
+        .join(' | ');
+  }
+
+  static Future<List<NetworkInterface>> _interfaces() async {
     try {
-      final interfaces = await NetworkInterface.list(
+      return await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLoopback: false,
       );
-      return interfaces
-          .where(
-            (iface) => wifiInterfacePrefixes.any(
-              iface.name.toLowerCase().startsWith,
-            ),
-          )
-          .expand((iface) => iface.addresses)
-          .map((address) => address.address)
-          .where(isPrivate)
-          .toList();
     } on SocketException {
       return const [];
     }

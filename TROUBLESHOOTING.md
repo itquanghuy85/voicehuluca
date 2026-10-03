@@ -164,6 +164,11 @@ Trên iOS, lần dò đầu tiên hệ thống sẽ hỏi quyền **Mạng nội
 Kiểm tra lại tại Cài đặt → VietVoice Studio → Mạng nội bộ. Đây là lý do phổ
 biến nhất khi Android thấy máy chủ còn iOS thì không.
 
+Khi dò thất bại, thông báo có kèm dòng `Giao diện mạng: en0=192.168.68.65 |
+...` — đó là danh sách interface mà hệ điều hành thực sự trả về. Gửi dòng này
+kèm lỗi để chẩn đoán nhanh. Nhật IP thủ công vẫn dùng được trong mọi trường
+hợp.
+
 ---
 
 ## API Connection Issues

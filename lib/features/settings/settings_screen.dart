@@ -590,7 +590,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _scanLan() async {
     final addresses = await LanBackendScanner.localAddresses();
     if (addresses.isEmpty) {
-      _showSnackBar(AppStrings.settingsBackendScanNoAddress, isError: true);
+      await _showScanFailure(AppStrings.settingsBackendScanNoAddress);
       return;
     }
 
@@ -615,10 +615,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isScanning = false);
     if (found.isEmpty) {
-      _showSnackBar(AppStrings.settingsBackendScanNone, isError: true);
+      await _showScanFailure(
+        AppStrings.settingsBackendScanNone,
+        tried: addresses.join(', '),
+      );
       return;
     }
     _showDiscoveredSheet(found);
+  }
+
+  /// A failed scan has to say what the platform reported, otherwise the user
+  /// cannot tell a missing permission from a missing server. Manual entry stays
+  /// available in every one of these cases.
+  Future<void> _showScanFailure(String message, {String? tried}) async {
+    final report = await LanBackendScanner.interfaceReport();
+    if (!mounted) return;
+    _showSnackBar(
+      [
+        message,
+        AppStrings.settingsBackendScanLocalNetwork,
+        if (tried != null)
+          AppStrings.fill(AppStrings.settingsBackendScanTried, [tried]),
+        AppStrings.fill(AppStrings.settingsBackendScanIfaceReport, [report]),
+        AppStrings.settingsBackendScanManualHint,
+      ].join('\n'),
+      isError: true,
+    );
   }
 
   void _showDiscoveredSheet(List<DiscoveredBackend> found) {

@@ -95,6 +95,59 @@ void main() {
       expect(neighbours.last, '192.168.1.254');
       expect(LanBackendScanner.neighboursOf('nonsense'), isEmpty);
     });
+
+    test('Wi-Fi interfaces are preferred on every platform naming', () {
+      expect(
+        LanBackendScanner.selectLocalAddresses({
+          'wlan0': ['192.168.68.117'],
+          'pdp_ip0': ['10.20.30.40'],
+        }),
+        ['192.168.68.117'],
+      );
+      expect(
+        LanBackendScanner.selectLocalAddresses({
+          'en0': ['192.168.68.117'],
+          'pdp_ip0': ['10.20.30.40'],
+        }),
+        ['192.168.68.117'],
+      );
+    });
+
+    test('an interface name the platform invents still yields an address', () {
+      // iOS names Wi-Fi en0 today; a name outside the known prefixes must not
+      // be able to make discovery report "no local address".
+      expect(
+        LanBackendScanner.selectLocalAddresses({
+          'bridge100': ['192.168.68.117'],
+        }),
+        ['192.168.68.117'],
+      );
+      expect(
+        LanBackendScanner.selectLocalAddresses({
+          'en9': ['192.168.1.20'],
+          'en0': ['169.254.9.9'],
+        }),
+        ['192.168.1.20'],
+      );
+    });
+
+    test('public and link-local addresses are never scanned', () {
+      expect(
+        LanBackendScanner.selectLocalAddresses({
+          'en0': ['8.8.8.8', '169.254.1.1', '127.0.0.1'],
+        }),
+        isEmpty,
+      );
+    });
+
+    test('the interfaces of the machine running the test are usable', () async {
+      // Exercises the real dart:io path, so a throwing or empty enumeration is
+      // caught here instead of on a phone.
+      final report = await LanBackendScanner.interfaceReport();
+      expect(report.isNotEmpty, isTrue);
+      final addresses = await LanBackendScanner.localAddresses();
+      expect(addresses.every(LanBackendScanner.isPrivate), isTrue);
+    });
   });
 
   group('Scanning the local subnet', () {
