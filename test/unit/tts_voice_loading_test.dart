@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
+import 'package:voice_huluca/core/constants/app_constants.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
@@ -614,7 +615,10 @@ void main() {
 
         final state = container.read(voiceListProvider);
         expect(state.voices, isEmpty);
-        expect(state.error, AppStrings.errorBackendUnreachable);
+        // The message names the address that was dialled: a self-hosted
+        // backend is reached by IP, so that is the thing worth showing.
+        expect(state.error, contains('Không kết nối được máy chủ giọng nói'));
+        expect(state.error, contains(AppConstants.apiBaseUrl));
       },
     );
 
@@ -628,6 +632,16 @@ void main() {
           const TtsProviderException('down', kind: TtsErrorKind.network),
         ),
         AppStrings.errorBackendUnreachable,
+      );
+      expect(
+        mapError(
+          const TtsProviderException(
+            'down',
+            kind: TtsErrorKind.network,
+            endpoint: 'http://192.168.1.139:3000/v1',
+          ),
+        ),
+        contains('192.168.1.139:3000'),
       );
       expect(
         mapError(const TtsProviderException('boom', kind: TtsErrorKind.server)),

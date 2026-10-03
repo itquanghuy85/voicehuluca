@@ -463,7 +463,7 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
 /// Voice-list failures in the user's language.
 String mapError(Object error) {
   if (error is TtsProviderException) {
-    return mapTtsErrorKind(error.kind);
+    return mapTtsErrorKind(error.kind, endpoint: error.endpoint);
   }
   // A transport error that reached this far still means the voice server is
   // unreachable, so say that instead of a generic failure.
@@ -476,10 +476,16 @@ String mapError(Object error) {
 }
 
 /// Single mapping from provider error kind to user-facing text.
-String mapTtsErrorKind(TtsErrorKind kind) {
+///
+/// [endpoint] is the address the call was aimed at. A self-hosted backend is
+/// reached by IP, so a wrong or missing address is the most common failure and
+/// the message has to name it.
+String mapTtsErrorKind(TtsErrorKind kind, {String endpoint = ''}) {
   switch (kind) {
     case TtsErrorKind.network:
-      return AppStrings.errorBackendUnreachable;
+      return endpoint.isEmpty
+          ? AppStrings.errorBackendUnreachable
+          : AppStrings.errorBackendUnreachableAt(endpoint);
     case TtsErrorKind.unauthorized:
       return AppStrings.errorUnauthorized;
     case TtsErrorKind.paymentRequired:

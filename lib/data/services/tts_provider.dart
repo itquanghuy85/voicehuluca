@@ -118,11 +118,17 @@ class TtsProviderException implements Exception {
   final TtsErrorKind kind;
   final String providerId;
 
+  /// Address the call was aimed at, when the failure was a transport one. Shown
+  /// to the user, because "check the backend" is useless without knowing which
+  /// address was tried.
+  final String endpoint;
+
   const TtsProviderException(
     this.message, {
     this.statusCode = 0,
     this.kind = TtsErrorKind.unknown,
     this.providerId = '',
+    this.endpoint = '',
   });
 
   bool get isRetryable => switch (kind) {

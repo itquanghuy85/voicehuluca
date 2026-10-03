@@ -353,6 +353,14 @@ class AppStrings {
   /// server is not running (or the address is wrong), not a device problem.
   static const String errorBackendUnreachable =
       'Không kết nối được máy chủ giọng nói. Kiểm tra backend đang chạy và địa chỉ trong Cài đặt → Kết nối dịch vụ.';
+
+  /// Same failure, but naming the address that was actually dialled. A
+  /// self-hosted backend is reached by IP, so the address is the thing that is
+  /// almost always wrong.
+  static String errorBackendUnreachableAt(String endpoint) =>
+      'Không kết nối được máy chủ giọng nói tại $endpoint.\n'
+      'Kiểm tra backend đang chạy và địa chỉ trong Cài đặt → Kết nối dịch vụ. '
+      'Nếu địa chỉ trống, app đang dùng $endpoint — hãy nhập IP của máy chạy backend.';
   static const String errorUnauthorized =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   static const String errorQuotaExceeded =

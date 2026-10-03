@@ -65,11 +65,12 @@ class TtsRemoteDatasource {
     }
   }
 
-  TtsProviderException _unreachable(String detail) => TtsProviderException(
-    'Máy chủ giọng nói không phản hồi: $detail',
-    kind: TtsErrorKind.network,
-    providerId: provider,
-  );
+TtsProviderException _unreachable(String detail) => TtsProviderException(
+      'Máy chủ giọng nói không phản hồi: $detail',
+      kind: TtsErrorKind.network,
+      providerId: provider,
+      endpoint: baseUrl,
+    );
 
   Future<List<Voice>> getVoices() async {
     final uri = Uri.parse(

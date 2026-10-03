@@ -295,6 +295,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
         _isSaving = false;
         _error = mapTtsErrorKind(
           error is TtsProviderException ? error.kind : TtsErrorKind.unknown,
+          endpoint: error is TtsProviderException ? error.endpoint : '',
         );
       });
     }
