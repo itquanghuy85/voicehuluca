@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_huluca/core/constants/app_constants.dart';
+import 'package:voice_huluca/core/network/backend_config.dart';
 import 'package:voice_huluca/core/network/backend_discovery.dart';
 import 'package:voice_huluca/core/network/backend_endpoint.dart';
 
@@ -170,7 +171,10 @@ void main() {
         },
       );
 
-      expect(probed.length, 254);
+      // 253 neighbours of a /24: the device's own address is never probed,
+      // because the phone is never the backend.
+      expect(probed.length, 253);
+      expect(probed, isNot(contains('192.168.5.10')));
       expect(found.map((server) => server.baseUrl), [
         'http://192.168.5.7:3000/v1',
         'http://192.168.5.42:3000/v1',
@@ -204,7 +208,24 @@ void main() {
         },
       );
 
-      expect(calls, 254);
+      // 254 hosts in the shared /24, minus both of this device's addresses.
+      expect(calls, 252);
+    });
+
+    test('an address the caller excludes is never probed', () async {
+      final probed = <String>[];
+      await scanner.scan(
+        addresses: const ['192.168.5.10'],
+        parallelism: 254,
+        excludeSelf: const {'192.168.5.99'},
+        probe: (uri) async {
+          probed.add(uri.host);
+          return null;
+        },
+      );
+
+      expect(probed, isNot(contains('192.168.5.99')));
+      expect(probed.length, 252);
     });
 
     test('progress is reported for every batch', () async {
@@ -214,12 +235,12 @@ void main() {
         parallelism: 100,
         probe: (_) async => null,
         onProgress: (checked, total) {
-          expect(total, 254);
+          expect(total, 253);
           progress.add(checked);
         },
       );
 
-      expect(progress, [100, 200, 254]);
+      expect(progress, [100, 200, 253]);
     });
 
     test('an empty or public address list scans nothing', () async {
@@ -243,5 +264,26 @@ void main() {
       latencyMs: 12,
     );
     expect(server.endpoint, (host: '192.168.1.20', port: 3000));
+  });
+
+  group('one source of truth for the address', () {
+    test('BackendConfig exposes the same value the app stores', () {
+      const stored = 'http://192.168.68.50:3000/v1';
+      expect(BackendConfig.resolve(stored), stored);
+      expect(BackendConfig.endpointOf(stored), (host: '192.168.68.50', port: 3000));
+      expect(BackendConfig.labelOf(stored), stored);
+    });
+
+    test('no LAN IP is compiled into the build as a default', () {
+      // Regression: the app shipped with a fixed 192.168.68.65 default, so a
+      // user on another network was permanently pointed at a dead host.
+      expect(AppConstants.apiBaseUrl, isNot(contains('192.168.')));
+      expect(BackendConfig.resolve(null), isNot(contains('192.168.')));
+    });
+
+    test('an unset address reports that it is unset instead of guessing', () {
+      expect(BackendConfig.endpointOf(AppConstants.apiBaseUrl), isNull);
+      expect(BackendConfig.labelOf(AppConstants.apiBaseUrl), isNotEmpty);
+    });
   });
 }

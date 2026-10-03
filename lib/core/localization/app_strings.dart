@@ -312,6 +312,14 @@ class AppStrings {
       'Địa chỉ máy đang chạy backend. Gõ IP của máy đó, hoặc bấm "Dò trong mạng LAN" để app tự tìm.';
   static const String settingsBackendUrlLabel = 'Địa chỉ máy chủ';
   static const String settingsBackendUrlHint = '192.168.1.20:3000';
+  static const String settingsDeviceLabel = 'Thiết bị này';
+  static const String settingsDeviceHint = 'iPhone của bạn (địa chỉ Wi-Fi)';
+  static const String settingsBackendLabel = 'Máy chủ giọng nói';
+  static const String settingsBackendPortLabel = 'Cổng';
+  static const String settingsBackendLatencyLabel = 'Độ trễ';
+  static const String settingsBackendProviderLabel = 'Nhà cung cấp';
+  static const String settingsBackendStatusConnected = 'Đã kết nối';
+  static const String settingsBackendStatusNotConnected = 'Không kết nối';
   static const String settingsBackendSave = 'Lưu';
   static const String settingsBackendSaved = 'Đã lưu địa chỉ máy chủ.';
   static const String settingsBackendReset = 'Dùng mặc định';
@@ -324,20 +332,40 @@ class AppStrings {
       'Không tìm thấy backend nào. Hãy kiểm tra máy chủ đã bật và cùng một mạng Wi-Fi.';
   static const String settingsBackendScanNoAddress =
       'Không lấy được địa chỉ IP của máy. Hãy nhập địa chỉ thủ công.';
+  static const String settingsBackendScanNoLanPermission =
+      'VietVoice Studio chưa được phép truy cập mạng nội bộ. Mở Cài đặt → Quyền riêng tư & Bảo mật → Mạng nội bộ → VietVoice Studio → Bật, rồi thử lại.';
+  static const String settingsBackendOpenSettings = 'Mở Cài đặt';
   static const String settingsBackendScanLocalNetwork =
       'Ứng dụng cần quyền Mạng nội bộ để tìm máy chủ trong Wi-Fi. Nếu đã từng từ chối, mở Cài đặt → VietVoice Studio → Mạng nội bộ. Bạn vẫn có thể nhập IP thủ công ở ô trên.';
   static const String settingsBackendScanIfaceReport =
       'Giao diện mạng: {0}';
   static const String settingsBackendScanTried = 'Đã dò quanh {0}';
   static const String settingsBackendScanManualHint =
-      'Nhập tay http://192.168.1.20:3000/v1 cũng dùng được.';
+      'Nhập IP máy chủ thủ công vẫn dùng được trong mọi trường hợp.';
   static const String settingsBackendScanTitle = 'Máy chủ trong mạng LAN';
   static const String settingsBackendScanHint = 'Chạm để dùng máy chủ này';
   static const String settingsBackendCheck = 'Kiểm tra';
+  static const String settingsBackendEnterAddress = 'Nhập địa chỉ máy chủ';
   static const String settingsBackendChecking = 'Đang kiểm tra...';
   static const String settingsBackendCheckOk = 'Kết nối được ({0} ms).';
   static const String settingsBackendCheckFailed =
       'Không kết nối được máy chủ này.';
+  static const String settingsBackendCheckRefused =
+      'Đã tới máy chủ nhưng cổng {1} không nhận kết nối tại {0}. Backend chưa chạy hoặc tường lửa đang chặn.';
+  static const String settingsBackendCheckTimeout =
+      'Máy chủ không phản hồi tại {0} (quá thời gian). Backend có thể đã tắt hoặc Wi-Fi chặn kết nối giữa các thiết bị.';
+  static const String settingsBackendCheckUnreachable =
+      'Không có đường tới {0}. Điện thoại và máy chạy backend phải cùng một mạng Wi-Fi.';
+  static const String settingsBackendCheckHttp =
+      'Backend trả về HTTP {0}. {1}';
+  static const String settingsBackendCheckHttpNotFound =
+      'Backend đang chạy nhưng endpoint sai (HTTP 404). Kiểm tra địa chỉ có dạng http://<ip>:3000/v1.';
+  static const String settingsBackendCheckHttpAuth =
+      'Backend yêu cầu xác thực (HTTP {0}). Kiểm tra API key trong Cài đặt → Kết nối dịch vụ.';
+  static const String settingsBackendCheckHttpServer =
+      'Backend gặp lỗi nội bộ (HTTP {0}). Kiểm tra log backend / provider.';
+  static const String settingsBackendCheckWrongService =
+      'Máy chủ tại {0} phản hồi nhưng không phải VietVoice backend.';
   static const String settingsBackendCurrent = 'Đang dùng';
   static const String settingsBackendClose = 'Đóng';
 
@@ -400,6 +428,30 @@ class AppStrings {
 
   static String errorBackendServer(int statusCode, String detail) =>
       'Máy chủ gặp lỗi (HTTP $statusCode).\n$detail';
+
+  /// Health-check failures keep their HTTP meaning: 404 is a wrong endpoint,
+  /// 401/403 is auth, 5xx is the server/provider — never a generic message.
+  static String errorBackendHealthHttp(int statusCode, String endpoint) {
+    if (statusCode == 404) return AppStrings.settingsBackendCheckHttpNotFound;
+    if (statusCode == 401 || statusCode == 403) {
+      return AppStrings.fill(AppStrings.settingsBackendCheckHttpAuth, [
+        statusCode,
+      ]);
+    }
+    if (statusCode >= 500) {
+      return AppStrings.fill(AppStrings.settingsBackendCheckHttpServer, [
+        statusCode,
+      ]);
+    }
+    return AppStrings.fill(AppStrings.settingsBackendCheckHttp, [
+      statusCode,
+      endpoint,
+    ]);
+  }
+
+  static const String errorLocalNetworkPermission =
+      'VietVoice Studio chưa được phép truy cập mạng nội bộ.\n'
+      'Mở Cài đặt → Quyền riêng tư & Bảo mật → Mạng nội bộ → VietVoice Studio → Bật.';
 
   static const String errorUnauthorized =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
@@ -2256,6 +2308,11 @@ class AppStrings {
   static const String recordVoiceRetry = 'Thử lại';
   static const String recordVoiceKeptSample =
       'Bản ghi vẫn được giữ, bạn không cần ghi lại.';
+
+  /// Shown next to the kept recording so a failed clone is recoverable without
+  /// re-recording: delete it, or go and point the app at a reachable backend.
+  static const String recordVoiceDeleteSample = 'Xóa bản ghi';
+  static const String recordVoiceChooseServer = 'Chọn máy chủ';
 
   /// The backend is up but the selected provider has no credentials, which is a
   /// settings problem on the PC rather than anything to do with the recording.

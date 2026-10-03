@@ -210,11 +210,20 @@ class BackendHealth {
     required this.service,
     required this.version,
     required this.providers,
+    this.provider = '',
+    this.timestamp,
   });
 
   final String service;
   final String version;
   final Map<String, bool> providers;
+
+  /// Default provider id reported by the backend (`provider` field).
+  /// Empty when an older backend did not send it yet.
+  final String provider;
+
+  /// Server clock at the time of the health check, when the backend sent one.
+  final DateTime? timestamp;
 
   /// True when this really is a VietVoice backend rather than something else
   /// answering on the configured port.

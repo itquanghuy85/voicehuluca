@@ -31,7 +31,7 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Không dùng nhận dạng giọng nói. Quyền Micrô chỉ phục vụ việc ghi âm mẫu giọng.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>VietVoice Studio cần quyền Mạng nội bộ để dò máy chủ giọng nói đang chạy trong cùng mạng Wi-Fi với điện thoại.</string>
+	<string>VietVoice Studio cần truy cập mạng nội bộ để kết nối tới máy chủ giọng nói đang chạy trên máy tính của bạn.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -1,11 +1,14 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/app/app_settings_opener.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
+import '../../core/network/backend_config.dart';
 import '../../core/network/backend_discovery.dart';
 import '../../core/network/backend_endpoint.dart';
 import '../../data/services/tts_provider.dart';
@@ -27,6 +30,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _scannedHosts = 0;
   int _scanTotal = 0;
 
+  /// Last successful `GET /health`: address + provider + latency.
+  BackendCheckResult? _lastCheck;
+
+  /// Last failed `GET /health`: the distinct, actionable cause.
+  String? _lastCheckError;
+
+  /// This device's own Wi-Fi address, for the "Thiết bị này" row.
+  /// Never offered as a backend candidate.
+  String? _deviceAddress;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +48,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // The stored address may still be loading, so seed the field now and let
       // the listener in build() keep it in sync afterwards.
       _backendController.text = ref.read(backendUrlProvider);
+      _refreshDeviceAddress();
     });
+  }
+
+  Future<void> _refreshDeviceAddress() async {
+    try {
+      final addresses = await LanBackendScanner.localAddresses();
+      if (!mounted) return;
+      setState(() {
+        _deviceAddress = addresses.isEmpty ? null : addresses.first;
+      });
+    } on Object {
+      // No address: the row simply stays hidden.
+    }
   }
 
   @override
@@ -282,15 +308,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
+  void _showSnackBar(
+    String message, {
+    bool isError = false,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     final colorScheme = AppColorScheme.of(Theme.of(context).brightness);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? colorScheme.error : null,
-        duration: AppConstants.snackBarDuration,
+        duration: const Duration(seconds: 8),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
+        action: actionLabel == null || onAction == null
+            ? null
+            : SnackBarAction(label: actionLabel, onPressed: onAction),
       ),
     );
   }
@@ -413,12 +447,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Lets the user point the app at the machine that runs the backend, either by
   /// typing its address or by letting the app find it on the same Wi-Fi.
+  ///
+  /// Device and server stay apart: `Thiết bị này` is this phone's own Wi-Fi
+  /// address (never a backend candidate), `Máy chủ giọng nói` is the
+  /// confirmed server address + status. Raw interface names never appear here.
   Widget _buildBackendSection(AppColorScheme colorScheme) {
     final activeUrl = ref.watch(backendUrlProvider);
     // A build without --dart-define carries no address, so "no address" and
     // "the address this build was compiled with" are both just an empty string.
     final notConfigured = activeUrl.isEmpty;
     final usingDefault = notConfigured || activeUrl == AppConstants.apiBaseUrl;
+    final endpoint = notConfigured
+        ? null
+        : BackendConfig.endpointOf(activeUrl);
+    final connected = !notConfigured && _lastCheckError == null;
 
     return _buildSection(
       title: AppStrings.settingsBackendTitle,
@@ -427,6 +469,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_deviceAddress != null)
+            _BackendInfoRow(
+              label: AppStrings.settingsDeviceLabel,
+              value: _deviceAddress!,
+              hint: AppStrings.settingsDeviceHint,
+              colorScheme: colorScheme,
+            ),
+          _BackendInfoRow(
+            label: AppStrings.settingsBackendLabel,
+            value: notConfigured ? '—' : activeUrl,
+            colorScheme: colorScheme,
+            statusDot: notConfigured
+                ? null
+                : (connected ? colorScheme.success : colorScheme.error),
+            statusText: notConfigured
+                ? null
+                : (connected
+                      ? AppStrings.settingsBackendStatusConnected
+                      : AppStrings.settingsBackendStatusNotConnected),
+          ),
           CupertinoTextField(
             controller: _backendController,
             placeholder: AppStrings.settingsBackendUrlHint,
@@ -445,39 +507,81 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Icon(
-                AppIcons.server,
-                size: AppSizes.iconSmall,
-                color: colorScheme.textTertiary,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Text(
-                  notConfigured
-                      ? AppStrings.settingsBackendNotSet
-                      : usingDefault
-                      ? '${AppStrings.settingsBackendCurrent}: $activeUrl'
-                      : activeUrl,
-                  style: AppTypography.bodySmall.copyWith(
-                    color: notConfigured
-                        ? colorScheme.error
-                        : colorScheme.textTertiary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          if (_lastCheck?.health != null)
+            _BackendInfoRow(
+              label: AppStrings.settingsBackendProviderLabel,
+              value: _lastCheck!.health!.provider.isEmpty
+                  ? _lastCheck!.health!.version
+                  : '${_lastCheck!.health!.provider}'
+                        ' · v${_lastCheck!.health!.version}',
+              colorScheme: colorScheme,
+            ),
+          if (_lastCheck?.latencyMs != null)
+            _BackendInfoRow(
+              label: AppStrings.settingsBackendLatencyLabel,
+              value: '${_lastCheck!.latencyMs} ms',
+              colorScheme: colorScheme,
+            ),
+          if (endpoint != null)
+            _BackendInfoRow(
+              label: AppStrings.settingsBackendPortLabel,
+              value: '${endpoint.port}',
+              colorScheme: colorScheme,
+            ),
+          if (_lastCheckError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                _lastCheckError!,
+                style: AppTypography.bodySmall.copyWith(
+                  color: colorScheme.error,
                 ),
               ),
-            ],
-          ),
+            ),
+          if (notConfigured)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                AppStrings.settingsBackendNotSet,
+                style: AppTypography.bodySmall.copyWith(
+                  color: colorScheme.error,
+                ),
+              ),
+            )
+          else if (usingDefault)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                '${AppStrings.settingsBackendCurrent}: $activeUrl',
+                style: AppTypography.bodySmall.copyWith(
+                  color: colorScheme.textTertiary,
+                ),
+              ),
+            ),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
                 child: CupertinoButton(
-                  onPressed: _isScanning ? null : _scanLan,
+                  onPressed: _isChecking ? null : _checkBackendUrl,
                   color: colorScheme.primary,
+                  borderRadius: AppRadius.mediumAll,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: _isChecking
+                      ? const CupertinoActivityIndicator()
+                      : Text(
+                          AppStrings.settingsBackendCheck,
+                          style: AppTypography.label.copyWith(
+                            color: colorScheme.onPrimary,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: CupertinoButton(
+                  onPressed: _isScanning ? null : _scanLan,
+                  color: colorScheme.surface,
                   borderRadius: AppRadius.mediumAll,
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text(
@@ -488,29 +592,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ])
                         : AppStrings.settingsBackendScan,
                     style: AppTypography.label.copyWith(
-                      color: colorScheme.onPrimary,
+                      color: colorScheme.textPrimary,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: CupertinoButton(
-                  onPressed: _isChecking ? null : _checkBackendUrl,
-                  color: colorScheme.surface,
-                  borderRadius: AppRadius.mediumAll,
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                  child: _isChecking
-                      ? const CupertinoActivityIndicator()
-                      : Text(
-                          AppStrings.settingsBackendCheck,
-                          style: AppTypography.label.copyWith(
-                            color: colorScheme.textPrimary,
-                          ),
-                        ),
-                ),
-              ),
             ],
+          ),
+          CupertinoButton(
+            onPressed: _showManualAddressSheet,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Text(
+              AppStrings.settingsBackendEnterAddress,
+              style: AppTypography.label.copyWith(
+                color: colorScheme.primary,
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.xs),
           Row(
@@ -549,7 +646,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _saveBackendUrl() async {
-    final parsed = BackendEndpoint.parse(_backendController.text);
+    final parsed = BackendConfig.parse(_backendController.text);
     if (parsed.url == null) {
       _showSnackBar(
         parsed.message ?? BackendEndpoint.invalidMessage,
@@ -572,8 +669,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   /// Pings whatever is in the field without saving it.
+  ///
+  /// Shows address + provider + latency on success, or the real cause
+  /// (refused / timeout / no route / HTTP 404 / 401 / 500 / wrong service)
+  /// instead of one generic "cannot connect" line.
   Future<void> _checkBackendUrl() async {
-    final parsed = BackendEndpoint.parse(_backendController.text);
+    final parsed = BackendConfig.parse(_backendController.text);
     if (parsed.url == null) {
       _showSnackBar(
         parsed.message ?? BackendEndpoint.invalidMessage,
@@ -581,19 +682,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
       return;
     }
-    setState(() => _isChecking = true);
-    final latency = await _scanner.ping(parsed.url!);
+    setState(() {
+      _isChecking = true;
+      _lastCheck = null;
+      _lastCheckError = null;
+    });
+    final result = await checkBackendHealth(parsed.url!);
     if (!mounted) return;
-    setState(() => _isChecking = false);
+    setState(() {
+      _isChecking = false;
+      if (result.isSuccess) {
+        _lastCheck = result;
+        _lastCheckError = null;
+      } else {
+        _lastCheck = null;
+        _lastCheckError = result.errorMessage;
+      }
+    });
     _showSnackBar(
-      latency == null
-          ? AppStrings.settingsBackendCheckFailed
-          : AppStrings.fill(AppStrings.settingsBackendCheckOk, [latency]),
-      isError: latency == null,
+      result.isSuccess
+          ? AppStrings.fill(AppStrings.settingsBackendCheckOk, [
+              result.latencyMs ?? 0,
+            ])
+          : (result.errorMessage ??
+                AppStrings.settingsBackendCheckFailed),
+      isError: !result.isSuccess,
     );
   }
 
   /// Walks the local /24 and offers every backend that answers.
+  ///
+  /// Never offers this device's own address: the iPhone is not the backend.
+  /// Interface names (`pdp_ip0`, `ipsec5`, …) stay in debug logs, not in the UI.
   Future<void> _scanLan() async {
     final addresses = await LanBackendScanner.localAddresses();
     if (addresses.isEmpty) {
@@ -609,6 +729,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final found = await _scanner.scan(
       addresses: addresses,
+      excludeSelf: addresses.toSet(),
       onProgress: (checked, total) {
         if (mounted) {
           setState(() {
@@ -622,32 +743,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isScanning = false);
     if (found.isEmpty) {
+      // Show swept subnets, not the phone's own IP as a candidate.
+      final swept = {
+        for (final address in addresses)
+          LanBackendScanner.subnetOf(address),
+      }.whereType<String>().map((subnet) => '$subnet.1–254').join(', ');
+      final detail = kDebugMode
+          ? await LanBackendScanner.debugReport()
+          : null;
       await _showScanFailure(
         AppStrings.settingsBackendScanNone,
-        tried: addresses.join(', '),
+        tried: swept.isEmpty ? addresses.join(', ') : swept,
+        detail: detail,
       );
       return;
     }
     _showDiscoveredSheet(found);
   }
 
-  /// A failed scan has to say what the platform reported, otherwise the user
-  /// cannot tell a missing permission from a missing server. Manual entry stays
-  /// available in every one of these cases.
-  Future<void> _showScanFailure(String message, {String? tried}) async {
-    final report = await LanBackendScanner.interfaceReport();
+  /// A failed scan has to say what was swept and how to grant Local Network.
+  /// Raw interface names stay in debug logs; the UI shows subnets + guidance.
+  /// Manual entry stays available in every one of these cases.
+  Future<void> _showScanFailure(
+    String message, {
+    String? tried,
+    String? detail,
+  }) async {
+    if (!mounted) return;
+    final lines = <String>[
+      message,
+      AppStrings.settingsBackendScanLocalNetwork,
+      if (tried != null)
+        AppStrings.fill(AppStrings.settingsBackendScanTried, [tried]),
+      if (detail != null && detail.isNotEmpty)
+        AppStrings.fill(AppStrings.settingsBackendScanIfaceReport, [detail]),
+      AppStrings.settingsBackendScanManualHint,
+    ];
+    final noPermissionHint = message == AppStrings.settingsBackendScanNone;
     if (!mounted) return;
     _showSnackBar(
-      [
-        message,
-        AppStrings.settingsBackendScanLocalNetwork,
-        if (tried != null)
-          AppStrings.fill(AppStrings.settingsBackendScanTried, [tried]),
-        AppStrings.fill(AppStrings.settingsBackendScanIfaceReport, [report]),
-        AppStrings.settingsBackendScanManualHint,
-      ].join('\n'),
+      lines.join('\n'),
       isError: true,
+      actionLabel: noPermissionHint
+          ? AppStrings.settingsBackendOpenSettings
+          : null,
+      onAction: noPermissionHint ? () => openAppSettings() : null,
     );
+  }
+
+  Future<void> _showManualAddressSheet() async {
+    final controller = TextEditingController(text: _backendController.text);
+    final save = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: Text(AppStrings.settingsBackendEnterAddress),
+        message: Text(AppStrings.settingsBackendScanManualHint),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext, true),
+            child: Text(AppStrings.settingsBackendSave),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext, false),
+          child: const Text(AppStrings.settingsCancel),
+        ),
+      ),
+    );
+    if (save == true) {
+      _backendController.text = controller.text;
+      if (mounted) await _saveBackendUrl();
+    }
+    controller.dispose();
   }
 
   void _showDiscoveredSheet(List<DiscoveredBackend> found) {
@@ -1234,6 +1401,90 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Label + value row that keeps device and server apart, with an optional
+/// `●/○ Đã kết nối` status dot. Never shows raw interface names.
+class _BackendInfoRow extends StatelessWidget {
+  const _BackendInfoRow({
+    required this.label,
+    required this.value,
+    required this.colorScheme,
+    this.hint,
+    this.statusDot,
+    this.statusText,
+  });
+
+  final String label;
+  final String value;
+  final AppColorScheme colorScheme;
+  final String? hint;
+  final Color? statusDot;
+  final String? statusText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: AppTypography.bodySmall.copyWith(
+                color: colorScheme.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (statusDot != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.xs),
+                        child: Text(
+                          '●',
+                          style: TextStyle(color: statusDot, fontSize: 12),
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: colorScheme.textPrimary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                if (statusText != null)
+                  Text(
+                    statusText!,
+                    style: AppTypography.caption.copyWith(
+                      color: colorScheme.textTertiary,
+                    ),
+                  )
+                else if (hint != null)
+                  Text(
+                    hint!,
+                    style: AppTypography.caption.copyWith(
+                      color: colorScheme.textTertiary,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

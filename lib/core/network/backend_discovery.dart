@@ -90,9 +90,13 @@ class LanBackendScanner {
   /// Wi-Fi-like interfaces win when they have a private address, otherwise every
   /// private address is used: an unknown interface name must never be able to
   /// hide the LAN, which is exactly what happened on iOS.
+  ///
+  /// The returned list never contains [exclude]: discovery must look for *other*
+  /// machines on the LAN, never for the phone itself.
   static List<String> selectLocalAddresses(
-    Map<String, List<String>> addressesByInterface,
-  ) {
+    Map<String, List<String>> addressesByInterface, {
+    Set<String> exclude = const {},
+  }) {
     final preferred = <String>[];
     final fallback = <String>[];
     for (final entry in addressesByInterface.entries) {
@@ -100,15 +104,24 @@ class LanBackendScanner {
       final looksLikeWifi = wifiInterfacePrefixes.any(name.startsWith);
       for (final address in entry.value) {
         if (!isPrivate(address)) continue;
+        if (exclude.contains(address)) continue;
         (looksLikeWifi ? preferred : fallback).add(address);
       }
     }
     return preferred.isNotEmpty ? preferred : fallback;
   }
 
-  /// What the platform actually reported, so a failed scan can explain itself
-  /// instead of asking the user to guess.
+  /// What the platform actually reported, kept for debug logs and diagnostics.
+  ///
+  /// Raw interface names (`pdp_ip0`, `ipsec5`, …) must not be shown to normal
+  /// users: the UI shows counts and swept subnets instead.
   static Future<String> interfaceReport() async {
+    return debugReport();
+  }
+
+  /// Raw `name=addresses` list, for logs and the debug line in failure
+  /// messages. Never shown as the primary UI.
+  static Future<String> debugReport() async {
     final interfaces = await _interfaces();
     if (interfaces.isEmpty) {
       return 'khong co IPv4 nao';
@@ -149,6 +162,9 @@ class LanBackendScanner {
   /// Runs [probe] over the local subnet and returns what answered, fastest
   /// first. [onProgress] reports how many hosts have been checked so the UI can
   /// show a moving counter instead of a frozen spinner.
+  ///
+  /// Hosts in [excludeSelf] are never probed: they are this device's own
+  /// addresses, and the iPhone is never the backend.
   Future<List<DiscoveredBackend>> scan({
     BackendProbe? probe,
     int port = defaultPort,
@@ -156,12 +172,17 @@ class LanBackendScanner {
     Duration timeout = probeTimeout,
     int parallelism = concurrency,
     void Function(int checked, int total)? onProgress,
+    Set<String> excludeSelf = const {},
   }) async {
     final local = addresses ?? await localAddresses();
     final hosts = <String>{};
     for (final address in local) {
       hosts.addAll(neighboursOf(address));
     }
+    hosts.removeAll(excludeSelf);
+    // The phone itself can answer on its own address in emulators; it is never
+    // a backend candidate on real hardware either.
+    hosts.removeAll(local);
     if (hosts.isEmpty) {
       return const [];
     }

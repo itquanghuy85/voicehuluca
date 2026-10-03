@@ -15,6 +15,7 @@ import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/core/utils/connectivity_utils.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart'
     hide Voice;
+import 'package:voice_huluca/core/network/backend_config.dart';
 import 'package:voice_huluca/core/network/backend_discovery.dart';
 import 'package:voice_huluca/core/network/backend_endpoint.dart';
 import 'package:voice_huluca/core/network/network_failure.dart';
@@ -330,9 +331,143 @@ final activeTtsProviderProvider = Provider<TtsProvider>((ref) {
 });
 
 /// Whether the active provider can clone a voice.
+/// (Static fallback; the live check lives in `checkBackendHealth` results.)
 final activeProviderSupportsCloningProvider = Provider<bool>((ref) {
   return TtsProviderIds.canClone(ref.watch(ttsProviderIdProvider));
 });
+
+/// Detailed result of `GET {baseUrl}/health` for Settings: address,
+/// provider list, latency — or a distinct, actionable failure message.
+/// Never a single "cannot connect" line.
+class BackendCheckResult {
+  const BackendCheckResult._({
+    this.health,
+    this.latencyMs,
+    this.errorMessage,
+  });
+
+  final BackendHealth? health;
+  final int? latencyMs;
+  final String? errorMessage;
+
+  bool get isSuccess => health != null && errorMessage == null;
+
+  factory BackendCheckResult.success({
+    required BackendHealth health,
+    required int latencyMs,
+  }) => BackendCheckResult._(health: health, latencyMs: latencyMs);
+
+  factory BackendCheckResult.failure(String message) =>
+      BackendCheckResult._(errorMessage: message);
+}
+
+/// Runs `GET {baseUrl}/health` and maps every outcome to a distinct message:
+/// refused port, timeout, no route, DNS/TLS, HTTP 404/401/403/5xx, wrong
+/// service — never one generic "cannot connect" line.
+Future<BackendCheckResult> checkBackendHealth(
+  String baseUrl, {
+  String apiKey = '',
+  String provider = AppConstants.defaultTtsProvider,
+  Duration timeout = const Duration(seconds: 8),
+}) async {
+  final remote = TtsRemoteDatasource(
+    baseUrl: baseUrl,
+    apiKey: apiKey,
+    provider: provider,
+  );
+  try {
+    final timed = await remote.checkHealthTimed(timeout: timeout);
+    if (!timed.health.isVietVoiceBackend) {
+      return BackendCheckResult.failure(
+        AppStrings.fill(AppStrings.settingsBackendCheckWrongService, [baseUrl]),
+      );
+    }
+    return BackendCheckResult.success(
+      health: timed.health,
+      latencyMs: timed.latencyMs,
+    );
+  } on TtsProviderException catch (error) {
+    return BackendCheckResult.failure(_healthErrorMessage(baseUrl, error));
+  } on TimeoutException {
+    return BackendCheckResult.failure(
+      AppStrings.fill(AppStrings.settingsBackendCheckTimeout, [baseUrl]),
+    );
+  } on Object catch (error) {
+    return BackendCheckResult.failure(
+      _networkCheckMessage(baseUrl, classifyNetworkFailure(error)),
+    );
+  } finally {
+    remote.dispose();
+  }
+}
+
+String _healthErrorMessage(String baseUrl, TtsProviderException error) {
+  final endpoint = BackendConfig.endpointOf(baseUrl);
+  switch (error.kind) {
+    case TtsErrorKind.network:
+      return _networkCheckMessage(baseUrl, error.failure);
+    case TtsErrorKind.unconfigured:
+      return AppStrings.errorBackendNotConfigured;
+    case TtsErrorKind.unauthorized:
+      return AppStrings.fill(AppStrings.settingsBackendCheckHttpAuth, [401]);
+    case TtsErrorKind.paymentRequired:
+      return AppStrings.fill(AppStrings.settingsBackendCheckHttp, [
+        402,
+        baseUrl,
+      ]);
+    case TtsErrorKind.voiceNotFound:
+    case TtsErrorKind.validation:
+    case TtsErrorKind.fileTooLarge:
+      if (error.statusCode == 404) {
+        return AppStrings.settingsBackendCheckHttpNotFound;
+      }
+      return AppStrings.errorBackendHealthHttp(error.statusCode, baseUrl);
+    case TtsErrorKind.server:
+    case TtsErrorKind.unavailable:
+    case TtsErrorKind.rateLimit:
+    case TtsErrorKind.unsupported:
+    case TtsErrorKind.unknown:
+      if (error.statusCode == 404) {
+        return AppStrings.settingsBackendCheckHttpNotFound;
+      }
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return AppStrings.fill(AppStrings.settingsBackendCheckHttpAuth, [
+          error.statusCode,
+        ]);
+      }
+      if (error.statusCode >= 500) {
+        return AppStrings.fill(AppStrings.settingsBackendCheckHttpServer, [
+          error.statusCode,
+        ]);
+      }
+      if (endpoint != null && error.statusCode > 0) {
+        return AppStrings.errorBackendHealthHttp(error.statusCode, baseUrl);
+      }
+      return _networkCheckMessage(baseUrl, error.failure);
+  }
+}
+
+String _networkCheckMessage(String baseUrl, NetworkFailure failure) {
+  final endpoint = BackendConfig.endpointOf(baseUrl);
+  final port = endpoint?.port ?? 3000;
+  return switch (failure) {
+    NetworkFailure.refused => AppStrings.fill(
+      AppStrings.settingsBackendCheckRefused,
+      [baseUrl, port],
+    ),
+    NetworkFailure.timedOut => AppStrings.fill(
+      AppStrings.settingsBackendCheckTimeout,
+      [baseUrl],
+    ),
+    NetworkFailure.unreachable => AppStrings.fill(
+      AppStrings.settingsBackendCheckUnreachable,
+      [baseUrl],
+    ),
+    NetworkFailure.dns => AppStrings.errorBackendDns(baseUrl),
+    NetworkFailure.tls => AppStrings.errorBackendTls(baseUrl),
+    NetworkFailure.unknown => AppStrings.errorBackendUnreachableAt(baseUrl),
+  };
+}
 
 /// Real availability reported by the backend (`GET /v1/providers`).
 ///

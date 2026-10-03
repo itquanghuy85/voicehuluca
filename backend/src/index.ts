@@ -42,15 +42,18 @@ app.use((req, res, next) => {
 });
 app.use(helmet());
 app.use(cors({
-  origin: config.nodeEnv === 'development'
-    ? true
-    : undefined,
-  credentials: true,
+  // A LAN backend is called by IP from the phone (a null/webview origin) as
+  // well as from browsers. Reflecting the origin keeps those calls working in
+  // every NODE_ENV without opening the API to credentialed cross-site use.
+  origin: true,
 }));
 app.use(express.json({ limit: '10mb' }));
-app.use(rateLimiter);
 
+// Health is a liveness probe for LAN discovery and for the user to tap by
+// hand: it must answer even under load and without an app API key.
 app.use('/v1/health', healthRouter);
+app.use('/health', healthRouter);
+app.use(rateLimiter);
 app.use('/v1/providers', (_req, res) => {
   res.json({ providers: describeProviders() });
 });
@@ -60,10 +63,13 @@ app.use('/v1/voices/clone', appApiKeyAuth, cloneRouter);
 app.use('/v1/voices', appApiKeyAuth, voicesRouter);
 app.use('/v1/text-to-speech', appApiKeyAuth, ttsRouter);
 app.use('/v1/user', appApiKeyAuth, usageRouter);
-app.use('/health', healthRouter);
 
 app.use(errorHandler);
 
 app.listen(config.port, '0.0.0.0', () => {
   console.log(`VietVoice Studio backend running on port ${config.port}`);
+  console.log(
+    'LAN: point the phone at http://<this-machine-lan-ip>:' +
+      `${config.port}/v1 (same Wi-Fi), then open /v1/health from the phone.`,
+  );
 });

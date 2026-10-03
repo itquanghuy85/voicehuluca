@@ -174,23 +174,47 @@ has three ways to set it:
 
 1. **Dò mạng LAN** — the app takes the Wi-Fi address the phone already has, walks
    that `/24` (254 hosts, 32 at a time) and asks each one for `GET /v1/health`.
-   Anything answering with the VietVoice signature is listed with its latency;
-   tap one to use it.
-2. **Type the address** — `192.168.1.20:3000` is enough. The app fills in
-   `http://` and `/v1` for you, so `192.168.1.20:3000`,
-   `http://192.168.1.20:3000/` and `http://192.168.1.20:3000/v1` all work.
-3. **Kiểm tra** — pings the address in the field without saving it.
+   Only hosts answering 200 **and** carrying the `vietvoice-backend` signature are
+   listed, with their latency; the phone's own addresses are never probed, so your
+   own IP can never appear as a server. Tap one to use it.
+2. **Nhập địa chỉ máy chủ** — `<ip>:3000` is enough. The app fills in `http://`
+   and `/v1` for you, so `<ip>:3000`, `http://<ip>:3000/` and
+   `http://<ip>:3000/v1` all work.
+3. **Kiểm tra kết nối** — pings the address in the field without saving it, and
+   reports the real cause: refused port, timeout, no route, DNS, HTTP 404, 401/403
+   or 5xx — each with its own message and its own fix.
+
+There is **no built-in default address**. Unless the build sets
+`--dart-define=API_BASE_URL=…`, the app starts unconfigured and asks.
+
+#### iOS: Local Network permission
+
+The app talks to the backend over plain TCP by IP, so iOS 14+ asks for
+**Local Network** access. Tap **Cho phép** on the first scan. If you denied it,
+re-enable at *Cài đặt → Quyền riêng tư & Bảo mật → Mạng nội bộ → VietVoice
+Studio*, then press **Thử lại**. Denying Local Network is reported as a
+permission problem, never as "backend not found".
 
 Notes for a home or office network:
 
+- The backend **must** listen on `0.0.0.0`, not `127.0.0.1`/`localhost`, or a
+  phone on the LAN cannot reach it. Verify with `netstat -ano | findstr :3000` →
+  `0.0.0.0:3000 LISTENING`.
 - Phone and server must be on the **same subnet**. Guest Wi-Fi, mobile data or a
   phone hotspot usually isolates the phone, so discovery finds nothing — type the
   address by hand in that case.
-- The backend listens on `0.0.0.0`, so allow port `3000` through the Windows
-  firewall if the phone cannot reach it.
+- Allow inbound TCP `3000` in the firewall. On Windows, running Node once usually
+  creates the rule; to add it explicitly (as Administrator):
+  `netsh advfirewall firewall add rule name="VietVoice 3000" dir=in action=allow protocol=TCP localport=3000`
+- Confirm the server answers from the phone itself before blaming the app: open
+  `http://<server-ip>:3000/v1/health` in **Safari on the phone**. If Safari works
+  but the app does not, the problem is the app or a permission — not the network.
+- To find your server's LAN address on Windows:
+  `ipconfig` → *IPv4 Address* of the adapter on that Wi-Fi (e.g. `192.168.68.50`).
+  Do not use a VPN, cellular or public address.
 - Android builds allow plain HTTP on purpose (`usesCleartextTraffic`), because a
   LAN backend is served over `http://`.
-- The address is stored per device, so the same APK works on any machine.
+- The address is stored per device, so the same build works on any machine.
 
 ### Configuring Secrets
 
@@ -481,6 +505,9 @@ await prefs.clear();
 
 | Document | Description |
 |----------|-------------|
+| [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | **Index of every document** — start here |
+| [HANDOVER.md](HANDOVER.md) | Backend LAN / iOS connectivity: root cause, verified address, iPhone test plan |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes per release |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | App architecture and design patterns |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | Colors, typography, spacing, components |
 | [TTS_PROVIDER.md](TTS_PROVIDER.md) | TTS provider abstraction and integrations |

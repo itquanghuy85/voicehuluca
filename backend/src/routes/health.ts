@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { describeProviders } from '../services/providerRouter';
+import { describeProviders, DEFAULT_PROVIDER_ID } from '../services/providerRouter';
 
 const router = Router();
 
@@ -11,6 +11,10 @@ const router = Router();
  *
  * `providers` reports what the backend can actually do right now, so a failed
  * clone can be told apart from a clone whose provider has no API key.
+ *
+ * Extra fields (`ok`, `timestamp`, `provider`) follow the client health-check
+ * contract: `ok` mirrors `status`, `timestamp` is the server clock in ISO-8601,
+ * and `provider` names the default TTS provider id.
  */
 router.get('/', (_req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store');
@@ -24,7 +28,9 @@ router.get('/', (_req: Request, res: Response) => {
     status: 'ok',
     service: 'vietvoice-backend',
     version: '1.0.0',
+    provider: DEFAULT_PROVIDER_ID,
     providers,
+    timestamp: new Date().toISOString(),
     discovery: true,
   });
 });

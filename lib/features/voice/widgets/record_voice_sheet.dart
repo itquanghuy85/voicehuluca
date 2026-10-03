@@ -95,6 +95,29 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
     });
   }
 
+  /// Deletes the local sample only when the user asks: a failed upload keeps
+  /// the recording so it can be retried without recording again.
+  Future<void> _discardSample() async {
+    if (_isSaving || _isRecording) return;
+    final path = _recordingPath;
+    setState(() {
+      _recordingPath = null;
+      _elapsed = Duration.zero;
+      _error = null;
+      _canRetry = false;
+    });
+    if (path == null) return;
+    try {
+      await File(path).delete();
+    } on Object {
+      // Best effort: the file is already forgotten by the UI.
+    }
+  }
+
+  void _openServerSettings() {
+    Navigator.of(context).pop(false);
+  }
+
   bool get _canSave =>
       _hasSample &&
       !_isSaving &&
@@ -498,6 +521,26 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),
+                if (_hasSample && !_isRecording) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: _isSaving ? null : _discardSample,
+                          child: Text(AppStrings.recordVoiceDeleteSample),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: _openServerSettings,
+                          child: Text(AppStrings.recordVoiceChooseServer),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 TextButton(
                   onPressed: _isSaving
                       ? null

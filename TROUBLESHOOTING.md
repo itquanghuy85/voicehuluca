@@ -142,32 +142,48 @@ flutter pub run build_runner build --delete-conflicting-outputs
 
 ### "Không kết nối được máy chủ giọng nói"
 
-App không gọi được backend. Kiểm tra theo thứ tự:
+App không gọi được backend. **Thông báo hiện ra đã nói đúng nguyên nhân**, nên đọc nó trước rồi làm đúng bước đó:
+
+| Thông báo | Nghĩa là | Cách sửa |
+|---|---|---|
+| Chưa được phép truy cập mạng nội bộ | iOS chặn LAN | Cài đặt → Quyền riêng tư & Bảo mật → Mạng nội bộ → VietVoice Studio → Bật |
+| Đã tới máy chủ nhưng cổng N không nhận kết nối | Backend chưa chạy / sai cổng | Khởi động lại backend, kiểm tra `PORT` |
+| Máy chủ không phản hồi (quá thời gian) | Có host nhưng không trả lời | Kiểm tra tường lửa, đổi Wi-Fi |
+| Không có đường đi tới máy chủ | Khác subnet, hoặc mạng chặn | Bỏ Guest Wi-Fi / hotspot |
+| Không phân giải được tên máy chủ | Nhập tên miền thay vì IP | Nhập IP + cổng |
+| Backend đang chạy nhưng endpoint sai (HTTP 404) | Sai đường dẫn | Dùng `http://<ip>:3000/v1` |
+| HTTP 401/403 | Sai API key ứng dụng | Kiểm tra `VVT_API_KEYS` |
+| HTTP 5xx | Backend/provider lỗi | Đọc log backend |
+
+Sau khi sửa, bấm **Thử lại** — không cần gõ lại địa chỉ.
+
+Nếu vẫn lỗi, kiểm tra theo thứ tự:
 
 ```
 1. Backend có chạy không?        → trên máy server: curl http://127.0.0.1:3000/v1/health
-2. Địa chỉ trong app đúng chưa? → Cài đặt → Máy chủ giọng nói → Kiểm tra
-3. Cùng mạng LAN không?         → điện thoại và máy server phải cùng một subnet.
+2. Backend có listen LAN không?  → netstat -ano | findstr :3000  → phải là 0.0.0.0:3000
+                                   (127.0.0.1 nghĩa là điện thoại không gọi được)
+3. Địa chỉ trong app đúng chưa? → Cài đặt → Máy chủ giọng nói → Kiểm tra
+4. Cùng mạng LAN không?         → điện thoại và máy server phải cùng một subnet.
                                   Guest Wi-Fi / hotspot thường cô lập điện thoại.
-4. Firewall chặn cổng 3000?     → trên máy server:
+5. Firewall chặn cổng 3000?     → trên máy server (quyền Administrator):
                                   netsh advfirewall firewall add rule name="VietVoice 3000" ^
                                     dir=in action=allow protocol=TCP localport=3000
-5. Điện thoại gọi được server?   → dùng app Kiểm tra, hoặc trên điện thoại:
-                                  curl http://<ip-may-server>:3000/v1/health
+6. Điện thoại gọi được server?   → Mở Safari trên điện thoại:
+                                  http://<ip-may-server>:3000/v1/health
+                                  Safari mở được mà app không → lỗi app/quyền.
+                                  Safari cũng không → lỗi mạng/firewall/server.
 ```
 
-Dò mạng LAN quét đúng `/24` quanh IP Wi-Fi của điện thoại (254 máy). Nếu backend
-nằm ở subnet khác (ví dụ `/22` và server ở 192.168.64.x) thì phải gõ tay địa chỉ.
+Dò mạng LAN quét đúng `/24` quanh IP Wi-Fi của điện thoại (254 máy, **trừ chính IP điện thoại** — điện thoại không bao giờ là máy chủ). Nếu backend nằm ở subnet khác (ví dụ `/22` và server ở 192.168.64.x) thì phải gõ tay địa chỉ.
+
+Backend trên máy này: `192.168.68.50:3000` → `http://192.168.68.50:3000/v1/health`. Nếu `ipconfig` cho ra IP khác thì IP đó mới là địa chỉ đúng — app không hard-code IP nào.
 
 Trên iOS, lần dò đầu tiên hệ thống sẽ hỏi quyền **Mạng nội bộ**. Phải bấm
 "Cho phép", nếu chọn "Không cho phép" thì mọi lần dò sau đều không ra kết quả.
-Kiểm tra lại tại Cài đặt → VietVoice Studio → Mạng nội bộ. Đây là lý do phổ
-biến nhất khi Android thấy máy chủ còn iOS thì không.
+Kiểm tra lại tại Cài đặt → Quyền riêng tư & Bảo mật → Mạng nội bộ → VietVoice Studio. Đây là lý do phổ biến nhất khi Android thấy máy chủ còn iOS thì không.
 
-Khi dò thất bại, thông báo có kèm dòng `Giao diện mạng: en0=192.168.68.65 |
-...` — đó là danh sách interface mà hệ điều hành thực sự trả về. Gửi dòng này
-kèm lỗi để chẩn đoán nhanh. Nhật IP thủ công vẫn dùng được trong mọi trường
-hợp.
+Khi dò thất bại, thông tin interface thô (`en0=…`, `pdp_ip0`, `ipsec5`) chỉ nằm trong **debug log** (`debugPrint`), không hiện ra màn hình nữa — iOS có quá nhiều interface ảo và người dùng không biết cái nào là IP thật. Lấy log bằng `flutter run` rồi xem console, tìm `[backend-url]` hoặc `[lan-scan]`. Nhật IP thủ công vẫn dùng được trong mọi trường hợp.
 
 ---
 

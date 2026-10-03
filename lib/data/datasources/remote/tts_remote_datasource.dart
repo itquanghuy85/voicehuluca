@@ -328,9 +328,15 @@ TtsProviderException _unreachable(String detail, Object cause) =>
   /// Asks the backend whether it is up and what it can do, before an upload is
   /// attempted. Uses the same error path as every other call, so an unreachable
   /// backend is reported by cause instead of a bare boolean.
+  ///
+  /// Health failures keep their HTTP meaning: 404 is a wrong endpoint/path,
+  /// 401/403 is app auth, 5xx is the server or provider — the caller maps them
+  /// to distinct messages instead of one "cannot connect" line.
   Future<BackendHealth> checkHealth() async {
     final uri = Uri.parse('$baseUrl/health');
+    final stopwatch = Stopwatch()..start();
     final response = await _guard(() => _client.get(uri, headers: _headers));
+    stopwatch.stop();
     if (response.statusCode != 200) {
       throw _fromBody(
         'Health check failed: ${response.statusCode}',
@@ -348,9 +354,14 @@ TtsProviderException _unreachable(String detail, Object cause) =>
       );
     }
     final providers = decoded['providers'];
+    final timestampRaw = decoded['timestamp'] as String?;
     return BackendHealth(
       service: decoded['service'] as String? ?? '',
       version: decoded['version'] as String? ?? '',
+      provider: decoded['provider'] as String? ?? '',
+      timestamp: timestampRaw == null
+          ? null
+          : DateTime.tryParse(timestampRaw),
       providers: providers is Map
           ? {
               for (final entry in providers.entries)
@@ -360,14 +371,32 @@ TtsProviderException _unreachable(String detail, Object cause) =>
     );
   }
 
+  /// Timed health check for Settings: reports latency alongside the payload so
+  /// the UI can show address + provider + latency without a second request.
+  Future<({BackendHealth health, int latencyMs})> checkHealthTimed({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final health = await checkHealth().timeout(timeout);
+    stopwatch.stop();
+    return (
+      health: health,
+      latencyMs: stopwatch.elapsedMilliseconds == 0
+          ? 1
+          : stopwatch.elapsedMilliseconds,
+    );
+  }
+
   Future<bool> testConnection() async {
     try {
-      final uri = Uri.parse('$baseUrl/user');
-      final response = await _client
-          .get(uri, headers: _headers)
-          .timeout(const Duration(seconds: 10));
-      debugPrint('testConnection $uri -> ${response.statusCode}');
-      return response.statusCode == 200;
+      final result = await checkHealthTimed(
+        timeout: const Duration(seconds: 10),
+      ).timeout(const Duration(seconds: 10));
+      debugPrint(
+        'testConnection $baseUrl/health -> ${result.health.service} '
+        '(${result.latencyMs}ms)',
+      );
+      return result.health.isVietVoiceBackend;
     } catch (e) {
       debugPrint('testConnection error: $e');
       return false;

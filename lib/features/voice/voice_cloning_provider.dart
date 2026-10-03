@@ -255,6 +255,10 @@ class CloningNotifier extends Notifier<CloningState> {
     );
     _startProgressAnimation();
     try {
+      // Backend must be up before anything is uploaded: a dead server keeps
+      // the local recording and reports the real cause instead of a clone
+      // failure. The file on disk is never deleted here.
+      await _tts.checkHealth();
       // Picked files may be 24-bit or float WAV; the engine reads integer PCM.
       final sample = await WavConverter.ensurePcm16(File(audioPath));
       final voice = await _tts.cloneVoice(
@@ -318,12 +322,21 @@ class CloningNotifier extends Notifier<CloningState> {
 
   String mapError(Object error) {
     if (error is SocketException) {
+      // The recording stays on disk; only the message changes.
       return AppStrings.errorNetwork;
     }
     if (error is TtsProviderException) {
       switch (error.kind) {
         case TtsErrorKind.unconfigured:
           return AppStrings.errorBackendNotConfigured;
+        case TtsErrorKind.network:
+          // Refused / timeout / unreachable / DNS each carry their own text;
+          // the recording is kept and the user retries or picks a server.
+          return mapTtsErrorKind(
+            error.kind,
+            endpoint: error.endpoint,
+            failure: error.failure,
+          );
         case TtsErrorKind.unsupported:
           return AppStrings.cloningUnsupportedMessage;
         case TtsErrorKind.unauthorized:
@@ -336,7 +349,6 @@ class CloningNotifier extends Notifier<CloningState> {
           return AppStrings.errorRateLimit;
         case TtsErrorKind.server:
         case TtsErrorKind.unavailable:
-        case TtsErrorKind.network:
           return AppStrings.errorProviderUnavailable;
         default:
           return AppStrings.errorCloningFailed;
