@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -224,13 +225,34 @@ class BackendUrlNotifier extends Notifier<String> {
     if (url != state) {
       state = url;
     }
-    if (url.isNotEmpty) return;
 
-    // Nothing configured yet, and this build carries no address. Rather than
-    // leave the app pointing at a placeholder host, look for the backend on the
-    // Wi-Fi the phone is already on. This is the same scan the Settings button
-    // runs, done once in the background.
-    await _adoptDiscoveredBackend();
+    // Nothing configured and this build carries no address: look for the
+    // backend on the Wi-Fi the phone is already on.
+    if (url.isEmpty) {
+      await _adoptDiscoveredBackend();
+      return;
+    }
+
+    // A stored address goes stale without warning: the PC joins another
+    // network, or DHCP hands out a different IP. The old code trusted it
+    // forever, so one machine that moved left the app permanently pointed at a
+    // dead host. Confirm it first, and look for a replacement when it is gone.
+    if (!await _isAlive(url)) {
+      await _adoptDiscoveredBackend();
+    }
+  }
+
+  /// Asks the backend at [url] whether it is really there.
+  Future<bool> _isAlive(String url) async {
+    try {
+      return await const LanBackendScanner()
+              .ping(url, timeout: const Duration(milliseconds: 800)) !=
+          null;
+    } on Object {
+      // No network, or no permission to use it: treat it as unverified rather
+      // than declaring the address wrong.
+      return true;
+    }
   }
 
   /// Scans the LAN once and remembers the fastest backend that answers. Returns
@@ -242,7 +264,16 @@ class BackendUrlNotifier extends Notifier<String> {
       );
       if (_disposed) return null;
       final best = found.isEmpty ? null : found.first.baseUrl;
-      if (best == null) return null;
+      if (best == null) {
+        debugPrint(
+          '[backend-url] no VietVoice backend found on the LAN, keeping '
+          '${state.isEmpty ? 'no address' : state}',
+        );
+        return null;
+      }
+      if (best != state) {
+        debugPrint('[backend-url] adopted discovered backend $best');
+      }
       await setUrl(best);
       return best;
     } on Object {
