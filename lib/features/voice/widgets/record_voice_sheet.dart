@@ -15,10 +15,13 @@ import 'package:voice_huluca/data/services/tts_provider.dart';
 import 'package:voice_huluca/features/voice/voice_provider.dart';
 
 /// Recording format expected by the local XTTS pipeline: 22 kHz mono WAV.
+/// [autoGain] lifts quiet voices before the loudness check runs, so a user who
+/// simply speaks softly is not told their microphone is broken.
 const RecordConfig recordVoiceConfig = RecordConfig(
   encoder: AudioEncoder.wav,
   sampleRate: 22050,
   numChannels: 1,
+  autoGain: true,
 );
 
 const Duration _minDuration = Duration(seconds: 5);
@@ -131,7 +134,8 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
 
     try {
       await _recorder.start(recordVoiceConfig, path: path);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('[voice-record] start failed on $path: $error');
       setState(() => _error = AppStrings.recordVoiceFailed);
       return;
     }
@@ -173,19 +177,21 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       // Refuse a silent sample here: cloning it produces a voice the user
       // cannot hear and cannot use.
       final quality = await _analyzeSample(path);
+      debugPrint('[voice-record] $path -> $quality');
       if (!mounted) return;
       setState(() {
         if (!quality.hasSpeech) {
           _recordingPath = null;
           _elapsed = Duration.zero;
-          _error = AppStrings.recordVoiceSilent;
+          _error = _messageFor(quality.status);
           return;
         }
         _recordingPath = path;
         _elapsed = quality.duration > _elapsed ? quality.duration : _elapsed;
         _error = null;
       });
-    } catch (_) {
+    } catch (error) {
+      debugPrint('[voice-record] stop failed: $error');
       if (!mounted) return;
       setState(() {
         _isRecording = false;
@@ -194,13 +200,25 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
     }
   }
 
+  /// A broken recording must not be blamed on the microphone, so each analyzer
+  /// outcome gets its own message.
+  String _messageFor(RecordingStatus status) => switch (status) {
+    RecordingStatus.unreadable ||
+    RecordingStatus.malformedHeader ||
+    RecordingStatus.missingData => AppStrings.recordVoiceUnreadable,
+    RecordingStatus.unsupportedFormat => AppStrings.recordVoiceBadFormat,
+    RecordingStatus.empty => AppStrings.recordVoiceEmpty,
+    _ => AppStrings.recordVoiceSilent,
+  };
+
   Future<RecordingQuality> _analyzeSample(String path) async {
     try {
       final file = File(path);
       final bytes = await file.readAsBytes();
       return analyzeWavBytes(bytes);
-    } catch (_) {
-      return RecordingQuality.silent;
+    } catch (error) {
+      debugPrint('[voice-record] cannot read $path: $error');
+      return RecordingQuality.unreadableValue;
     }
   }
 

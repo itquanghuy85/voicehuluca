@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -6,10 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_huluca/core/audio/recording_analyzer.dart';
 
 /// Builds a 16-bit PCM mono WAV the way the record plugin writes it.
+/// [speechRatio] is the share of the clip that carries the tone, so a test can
+/// model a quiet voice separated by long pauses.
 Uint8List buildWav({
   required double amplitude,
   int sampleRate = 22050,
   int seconds = 5,
+  double speechRatio = 1.0,
 }) {
   final sampleCount = sampleRate * seconds;
   final dataLength = sampleCount * 2;
@@ -35,10 +37,11 @@ Uint8List buildWav({
   writeAscii(36, 'data');
   bytes.setUint32(40, dataLength, Endian.little);
 
+  final speaking = (sampleCount * speechRatio).round();
   final random = Random(7);
   for (var i = 0; i < sampleCount; i++) {
-    final wave = sin(2 * pi * 220 * i / sampleRate);
     final noise = (random.nextDouble() - 0.5) * 0.002;
+    final wave = i < speaking ? sin(2 * pi * 220 * i / sampleRate) : 0.0;
     bytes.setInt16(
       44 + i * 2,
       ((wave + noise) * amplitude * 32767).round(),
@@ -62,6 +65,7 @@ void main() {
     test('room tone alone is rejected so no useless voice is created', () {
       final quality = analyzeWavBytes(buildWav(amplitude: 0.004));
 
+      expect(quality.status, RecordingStatus.silent);
       expect(quality.hasSpeech, isFalse);
       expect(quality.rms, lessThan(0.02));
     });
@@ -71,20 +75,46 @@ void main() {
       final quality = analyzeWavBytes(bytes);
 
       expect(quality.hasSpeech, isFalse);
+      expect(quality.status, RecordingStatus.silent);
     });
 
-    test('the silent clone sample from the phone is detected', () {
-      final quality = analyzeWavFile(
-        File(r'C:\Users\Admin\.vietvoice\voices\2a7001c7ce27\reference.wav'),
+    test('a quiet voice diluted by long pauses is still accepted', () {
+      // 20 seconds of near-silence followed by 4 seconds of quiet speech:
+      // whole-file RMS stays far below the old 0.02 cut-off.
+      final quality = analyzeWavBytes(
+        buildWav(amplitude: 0.03, seconds: 24, speechRatio: 1 / 6),
       );
-      // Recording made in a quiet room with no speech: must be refused.
-      expect(quality.duration.inSeconds, greaterThan(5));
-      expect(quality.hasSpeech, isFalse);
+
+      expect(quality.rms, lessThan(0.02));
+      expect(quality.hasSpeech, isTrue);
+    });
+
+    test('a truncated file is reported as unreadable, not as a quiet room', () {
+      final bytes = buildWav(amplitude: 0.3);
+      final truncated = Uint8List.sublistView(bytes, 0, 20);
+
+      expect(
+        analyzeWavBytes(truncated).status,
+        RecordingStatus.malformedHeader,
+      );
+    });
+
+    test('a non 16-bit file is reported as a format problem', () {
+      final bytes = buildWav(amplitude: 0.3);
+      ByteData.sublistView(bytes).setUint16(34, 24, Endian.little);
+
+      expect(
+        analyzeWavBytes(bytes).status,
+        RecordingStatus.unsupportedFormat,
+      );
     });
 
     test('garbage input does not throw', () {
       expect(analyzeWavBytes(Uint8List(0)).hasSpeech, isFalse);
-      expect(analyzeWavBytes(Uint8List.fromList([1, 2, 3])).hasSpeech, isFalse);
+      expect(
+        analyzeWavBytes(Uint8List.fromList([1, 2, 3])).status,
+        RecordingStatus.malformedHeader,
+      );
     });
   });
 }

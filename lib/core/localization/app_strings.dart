@@ -2209,6 +2209,12 @@ class AppStrings {
   static const String recordVoiceTooShort = 'Hãy ghi âm ít nhất 5 giây.';
   static const String recordVoiceSilent =
       'Không nghe thấy giọng nói trong bản ghi. Hãy kiểm tra micrô rồi ghi lại, đọc to và rõ trong khoảng 5-30 giây.';
+  static const String recordVoiceUnreadable =
+      'Không đọc được bản ghi vừa tạo. Hãy ghi lại, nếu vẫn bị lỗi này hãy mở lại ứng dụng.';
+  static const String recordVoiceBadFormat =
+      'Bản ghi không phải WAV 16-bit nên không dùng được cho giọng mới. Hãy ghi lại.';
+  static const String recordVoiceEmpty =
+      'Bản ghi không có dữ liệu âm thanh. Hãy kiểm tra micrô rồi ghi lại.';
   static const String recordVoiceTooLong = 'Đã đủ 30 giây, hãy dừng ghi.';
   static const String recordVoiceNameRequired =
       'Vui lòng đặt tên cho giọng mới.';
