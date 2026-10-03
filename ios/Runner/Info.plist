@@ -30,6 +30,8 @@
 	<string>VietVoice Studio cần quyền Micrô để ghi mẫu giọng của bạn và tạo giọng nói đọc kịch bản. Âm thanh chỉ được lưu trên máy của bạn.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Không dùng nhận dạng giọng nói. Quyền Micrô chỉ phục vụ việc ghi âm mẫu giọng.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>VietVoice Studio cần quyền Mạng nội bộ để dò máy chủ giọng nói đang chạy trong cùng mạng Wi-Fi với điện thoại.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

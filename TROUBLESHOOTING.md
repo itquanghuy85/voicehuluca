@@ -159,6 +159,11 @@ App không gọi được backend. Kiểm tra theo thứ tự:
 Dò mạng LAN quét đúng `/24` quanh IP Wi-Fi của điện thoại (254 máy). Nếu backend
 nằm ở subnet khác (ví dụ `/22` và server ở 192.168.64.x) thì phải gõ tay địa chỉ.
 
+Trên iOS, lần dò đầu tiên hệ thống sẽ hỏi quyền **Mạng nội bộ**. Phải bấm
+"Cho phép", nếu chọn "Không cho phép" thì mọi lần dò sau đều không ra kết quả.
+Kiểm tra lại tại Cài đặt → VietVoice Studio → Mạng nội bộ. Đây là lý do phổ
+biến nhất khi Android thấy máy chủ còn iOS thì không.
+
 ---
 
 ## API Connection Issues

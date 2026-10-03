@@ -57,8 +57,21 @@ class LanBackendScanner {
     return false;
   }
 
+  /// Interface prefixes that identify Wi-Fi per platform. Android names it
+  /// `wlan0`, iOS names it `en0` and the simulator mirrors the Mac.
+  static const List<String> wifiInterfacePrefixes = [
+    'wlan',
+    'wi-fi',
+    'en',
+  ];
+
   /// The device's own address, which may be the server when the phone is on the
   /// same machine as the backend (emulators, single-PC setups).
+  ///
+  /// Interface names differ per platform (`wlan0` on Android, `en0` on iOS), so
+  /// the address itself is the only reliable signal: anything that is not
+  /// private IPv4 belongs to a cell network or a VPN and cannot host the
+  /// backend.
   static Future<List<String>> localAddresses() async {
     try {
       final interfaces = await NetworkInterface.list(
@@ -67,8 +80,9 @@ class LanBackendScanner {
       );
       return interfaces
           .where(
-            (iface) =>
-                iface.name.startsWith('wlan') || iface.name.startsWith('wi-fi'),
+            (iface) => wifiInterfacePrefixes.any(
+              iface.name.toLowerCase().startsWith,
+            ),
           )
           .expand((iface) => iface.addresses)
           .map((address) => address.address)
