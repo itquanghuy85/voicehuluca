@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/voice.dart';
 import '../../services/tts_provider.dart';
+import '../../../core/network/network_failure.dart';
 
 /// Backend gateway for every TTS provider.
 ///
@@ -61,24 +62,29 @@ Future<T> _guard<T>(Future<T> Function() call) async {
       providerId: provider,
     );
   }
-  try {
+try {
     return await call();
   } on http.ClientException catch (error) {
-    throw _unreachable(error.message);
+    throw _unreachable(error.message, error);
   } on SocketException catch (error) {
-    throw _unreachable(error.message);
+    throw _unreachable(error.message, error);
   } on HandshakeException catch (error) {
-    throw _unreachable(error.message);
+    throw _unreachable(error.message, error);
   } on TimeoutException {
-    throw _unreachable('Yêu cầu quá thời gian.');
+    throw _unreachable(
+      'Yêu cầu quá thời gian.',
+      const SocketException('Connection timed out'),
+    );
   }
 }
 
-TtsProviderException _unreachable(String detail) => TtsProviderException(
+TtsProviderException _unreachable(String detail, Object cause) =>
+    TtsProviderException(
       'Máy chủ giọng nói không phản hồi: $detail',
       kind: TtsErrorKind.network,
       providerId: provider,
       endpoint: baseUrl,
+      failure: classifyNetworkFailure(cause),
     );
 
   Future<List<Voice>> getVoices() async {
@@ -316,6 +322,41 @@ TtsProviderException _unreachable(String detail) => TtsProviderException(
           : DateTime.fromMillisecondsSinceEpoch(
               (resetAt as num).toInt() * 1000,
             ),
+    );
+  }
+
+  /// Asks the backend whether it is up and what it can do, before an upload is
+  /// attempted. Uses the same error path as every other call, so an unreachable
+  /// backend is reported by cause instead of a bare boolean.
+  Future<BackendHealth> checkHealth() async {
+    final uri = Uri.parse('$baseUrl/health');
+    final response = await _guard(() => _client.get(uri, headers: _headers));
+    if (response.statusCode != 200) {
+      throw _fromBody(
+        'Health check failed: ${response.statusCode}',
+        response.statusCode,
+        response.body,
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw TtsProviderException(
+        'Máy chủ trả về dữ liệu không hợp lệ.',
+        kind: TtsErrorKind.server,
+        providerId: provider,
+        endpoint: baseUrl,
+      );
+    }
+    final providers = decoded['providers'];
+    return BackendHealth(
+      service: decoded['service'] as String? ?? '',
+      version: decoded['version'] as String? ?? '',
+      providers: providers is Map
+          ? {
+              for (final entry in providers.entries)
+                entry.key.toString(): entry.value == true,
+            }
+          : const {},
     );
   }
 

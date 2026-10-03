@@ -176,6 +176,11 @@ class TtsRepositoryImpl implements TtsRepository {
     );
   }
 
+  /// Asks the backend whether it is up before an upload, so the user is told the
+  /// real cause instead of a failed clone.
+@override
+Future<BackendHealth> checkHealth() => _remote.checkHealth();
+
   @override
   Future<Voice> cloneVoice({
     required String name,

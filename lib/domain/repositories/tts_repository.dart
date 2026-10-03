@@ -24,4 +24,9 @@ abstract class TtsRepository {
   });
 
   Future<TtsUsage?> getUsage();
+
+  /// Asks the backend whether it is up, so a clone is not attempted against a
+  /// server that is not there. Throws a [TtsProviderException] describing the
+  /// real cause.
+  Future<BackendHealth> checkHealth();
 }

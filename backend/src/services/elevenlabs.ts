@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { config } from '../config';
 import { AppError } from '../middleware/errorHandler';
+import { toCloneMp3 } from './cloneAudio';
 import {
   ElevenLabsVoicesResponse,
   ElevenLabsUsageResponse,
@@ -152,9 +153,17 @@ export async function cloneVoice(
     }
 
     for (const file of files) {
-      formData.append('files', file.buffer, {
+      // ElevenLabs documents MP3 192 kbps+ for cloning samples. If FFmpeg is
+      // installed the upload is re-encoded; otherwise the original WAV/M4A is
+      // sent, which the provider also accepts.
+      const sample = await toCloneMp3({
+        buffer: file.buffer,
         filename: file.originalname,
         contentType: file.mimetype,
+      });
+      formData.append('files', sample.buffer, {
+        filename: sample.filename,
+        contentType: sample.contentType,
       });
     }
 

@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/core/constants/app_constants.dart';
+import 'package:voice_huluca/core/network/network_failure.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
@@ -633,9 +634,9 @@ void main() {
 
         final state = container.read(voiceListProvider);
         expect(state.voices, isEmpty);
-        // The message names the address that was dialled: a self-hosted
-        // backend is reached by IP, so that is the thing worth showing.
-        expect(state.error, contains('Không kết nối được máy chủ giọng nói'));
+        // "Connection refused" is its own failure with its own fix, and the
+        // message names the address that was dialled.
+        expect(state.error, contains('từ chối kết nối'));
         expect(state.error, contains(_baseUrl));
       },
     );
@@ -670,16 +671,27 @@ void main() {
       );
     });
 
-    test('a raw socket error maps to the same guidance', () {
+    test('each way of failing to reach the backend says something different', () {
+      // A refused connection, an unreachable network and a bad name all used to
+      // produce one "không kết nối được" line, and all three need a different
+      // thing changed.
       expect(
         mapError(const SocketException('Connection refused')),
-        AppStrings.errorBackendUnreachable,
+        AppStrings.errorBackendRefused('máy chủ giọng nói'),
+      );
+      expect(
+        mapError(const SocketException('Failed host lookup: vietvoice')),
+        contains('Không phân giải được tên máy chủ'),
       );
       expect(
         mapError(
-          const TtsProviderException('down', kind: TtsErrorKind.network),
+          const TtsProviderException(
+            'down',
+            kind: TtsErrorKind.network,
+            failure: NetworkFailure.unreachable,
+          ),
         ),
-        AppStrings.errorBackendUnreachable,
+        contains('Không có đường tới'),
       );
       expect(
         mapError(
@@ -690,6 +702,26 @@ void main() {
           ),
         ),
         contains('192.168.1.139:3000'),
+      );
+expect(
+        mapError(
+          const TtsProviderException(
+            'Mẫu âm thanh dài 2.0s, cần ít nhất 5s.',
+            kind: TtsErrorKind.validation,
+            statusCode: 422,
+          ),
+        ),
+        allOf(contains('HTTP 422'), contains('cần ít nhất 5s')),
+      );
+      expect(
+        mapError(
+          const TtsProviderException(
+            'Mẫu âm thanh dài 2.0s, cần ít nhất 5s.',
+            kind: TtsErrorKind.validation,
+            statusCode: 422,
+          ),
+        ),
+        allOf(contains('HTTP 422'), contains('cần ít nhất 5s')),
       );
       expect(
         mapError(const TtsProviderException('boom', kind: TtsErrorKind.server)),

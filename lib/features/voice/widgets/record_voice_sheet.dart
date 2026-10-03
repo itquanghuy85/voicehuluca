@@ -55,6 +55,10 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   bool _isSaving = false;
   bool _needsMicPermission = false;
 
+  /// True once a save has failed, which turns the save button into "Thử lại"
+  /// so the recording is reused instead of re-recorded.
+  bool _canRetry = false;
+
   /// Loudest level seen while recording, in dBFS (0 is full scale, -160 silent).
   double _peakDb = -160;
 
@@ -112,6 +116,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _elapsed = Duration.zero;
       _recordingPath = null;
       _peakDb = -160;
+      _canRetry = false;
     });
 
     final hasPermission = await _recorder.hasPermission();
@@ -278,25 +283,37 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _error = null;
     });
 
+    final repository = ref.read(ttsRepositoryProvider);
     try {
-      await ref
-          .read(ttsRepositoryProvider)
-          .cloneVoice(
-            name: name,
-            description: '',
-            audioFiles: [File(path)],
-            language: 'vi',
-          );
+      // Ask the backend first. Uploading a recording that cannot be stored only
+      // produces a second, less useful error, and the recording must survive
+      // either way so the user can retry without recording again.
+      final health = await repository.checkHealth();
+      final providerId = ref.read(ttsProviderIdProvider);
+      if (health.providers.isNotEmpty && !health.canClone(providerId)) {
+        throw TtsProviderException(
+          AppStrings.cloneProviderUnavailable(providerId),
+          kind: TtsErrorKind.unavailable,
+          providerId: providerId,
+        );
+      }
+      await repository.cloneVoice(
+        name: name,
+        description: '',
+        audioFiles: [File(path)],
+        language: 'vi',
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
+      debugPrint('[voice-record] save failed: $error');
       if (!mounted) return;
       setState(() {
         _isSaving = false;
-        _error = mapTtsErrorKind(
-          error is TtsProviderException ? error.kind : TtsErrorKind.unknown,
-          endpoint: error is TtsProviderException ? error.endpoint : '',
-        );
+        // _recordingPath is deliberately kept: the sample is still on disk and
+        // "Thử lại" reuses it.
+        _error = mapError(error);
+        _canRetry = true;
       });
     }
   }
@@ -368,6 +385,17 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                     color: colors.error,
                     icon: AppIcons.errorOutlined,
                   ),
+                  // A failed save must not cost the recording: say so, and the
+                  // save button becomes "Thử lại" on the same sample.
+                  if (_canRetry && _hasSample) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      AppStrings.recordVoiceKeptSample,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ],
                 ],
                 if (_needsMicPermission) ...[
                   const SizedBox(height: AppSpacing.sm),
@@ -440,7 +468,9 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                                     color: colors.onPrimary,
                                   )
                                 : Text(
-                                    AppStrings.recordVoiceSave,
+                                    _canRetry
+                                        ? AppStrings.recordVoiceRetry
+                                        : AppStrings.recordVoiceSave,
                                     style: AppTypography.label.copyWith(
                                       color: colors.onPrimary,
                                     ),

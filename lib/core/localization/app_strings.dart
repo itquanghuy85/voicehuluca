@@ -369,6 +369,38 @@ class AppStrings {
   static const String errorBackendNotConfigured =
       'Chưa có địa chỉ máy chủ giọng nói. Mở Cài đặt → Kết nối dịch vụ, bấm "Dò trong mạng LAN" hoặc nhập IP của máy đang chạy backend.';
 
+  // ---- Backend reachability, one message per actual cause ----
+  // Every one of these used to be reported as "không kết nối được", which is
+  // true for all of them and points at the right fix for none.
+
+  static String errorBackendRefused(String endpoint) =>
+      'Máy chủ từ chối kết nối tại $endpoint.\n'
+      'Cổng 3000 không có gì lắng nghe: backend chưa chạy, hoặc tường lửa '
+      'Windows chặn kết nối từ mạng LAN.';
+
+  static String errorBackendTimedOut(String endpoint) =>
+      'Máy chủ không phản hồi tại $endpoint (quá thời gian).\n'
+      'Backend có thể đã tắt, hoặc mạng Wi-Fi đang chặn kết nối giữa các thiết bị.';
+
+  static String errorBackendUnreachableRoute(String endpoint) =>
+      'Không có đường tới $endpoint.\n'
+      'Điện thoại và máy chạy backend phải cùng một mạng Wi-Fi. Nếu router bật '
+      '"AP isolation"/"Client isolation", hãy tắt hoặc dùng hotspot.';
+
+  static String errorBackendDns(String endpoint) =>
+      'Không phân giải được tên máy chủ trong $endpoint.\n'
+      'Backend chạy trong LAN nên hãy nhập IP, ví dụ 192.168.1.20:3000.';
+
+  static String errorBackendTls(String endpoint) =>
+      'Không thiết lập được kết nối bảo mật tới $endpoint.\n'
+      'Backend trong LAN dùng http://, hãy nhập địa chỉ bắt đầu bằng http://.';
+
+  static String errorBackendClient(int statusCode, String detail) =>
+      'Máy chủ từ chối yêu cầu (HTTP $statusCode).\n$detail';
+
+  static String errorBackendServer(int statusCode, String detail) =>
+      'Máy chủ gặp lỗi (HTTP $statusCode).\n$detail';
+
   static const String errorUnauthorized =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   static const String errorQuotaExceeded =
@@ -2221,6 +2253,16 @@ class AppStrings {
   static const String recordVoiceStop = 'Dừng ghi âm';
   static const String recordVoiceRerecord = 'Ghi lại';
   static const String recordVoiceSave = 'Lưu giọng này';
+  static const String recordVoiceRetry = 'Thử lại';
+  static const String recordVoiceKeptSample =
+      'Bản ghi vẫn được giữ, bạn không cần ghi lại.';
+
+  /// The backend is up but the selected provider has no credentials, which is a
+  /// settings problem on the PC rather than anything to do with the recording.
+  static String cloneProviderUnavailable(String providerId) =>
+      'Máy chủ đã phản hồi, nhưng nhà cung cấp "$providerId" chưa sẵn sàng.\n'
+      'Nếu là ElevenLabs, hãy đặt ELEVENLABS_API_KEY trong backend rồi khởi động lại. '
+      'Hoặc chọn "TTS trên máy" trong Cài đặt.';
   static const String recordVoiceCancel = 'Huỷ';
   static const String recordVoiceTooShort = 'Hãy ghi âm ít nhất 5 giây.';
   static const String recordVoiceSilent =

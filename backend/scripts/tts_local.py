@@ -205,13 +205,24 @@ def is_pcm_wav(path: Path) -> bool:
 def _decode_to_mono(path: Path) -> Tuple[Any, int]:
     """Return ``(float32 mono samples, sample_rate)`` for any audio container.
 
-    ``torchaudio`` goes through torchcodec/FFmpeg and reads AAC in an M4A
-    container, which is what iOS actually produces even when WAV is asked for.
-    ``soundfile`` is the fallback for plain WAV and FLAC.
+    Order matters. ``soundfile`` is tried first because it reads WAV and FLOC
+    with no extra machinery, and because the torchcodec import behind
+    ``torchaudio`` is slow to fail when FFmpeg is missing. The two remaining
+    decoders are the ones that can read AAC in an M4A container, which is what
+    iOS produces, and both of them need FFmpeg: one as a library torchcodec can
+    load, the other as the ``ffmpeg`` command on PATH.
     """
     import numpy as np
 
     failures: List[str] = []
+    try:
+        import soundfile as sf
+
+        data, rate = sf.read(str(path), dtype="float32", always_2d=True)
+        return np.ascontiguousarray(data.mean(axis=1), dtype="float32"), int(rate)
+    except Exception as error:  # noqa: BLE001 - any decoder failure is a fallback
+        failures.append(f"soundfile: {_brief(error)}")
+
     try:
         import torch
         import torchaudio
@@ -219,36 +230,82 @@ def _decode_to_mono(path: Path) -> Tuple[Any, int]:
         waveform, rate = torchaudio.load(str(path))
         mono = waveform.to(torch.float32).mean(dim=0).numpy()
         return np.ascontiguousarray(mono, dtype="float32"), int(rate)
-    except Exception as error:  # noqa: BLE001 - any decoder failure is a fallback
+    except Exception as error:  # noqa: BLE001
         failures.append(f"torchaudio: {_brief(error)}")
 
     try:
-        import soundfile as sf
-
-        data, rate = sf.read(str(path), dtype="float32", always_2d=True)
-        return np.ascontiguousarray(data.mean(axis=1), dtype="float32"), int(rate)
+        return _decode_with_ffmpeg(path)
     except Exception as error:  # noqa: BLE001
-        failures.append(f"soundfile: {_brief(error)}")
+        failures.append(f"ffmpeg: {_brief(error)}")
 
     raise SidecarError(
         "InvalidSample",
-        "Không đọc được file âm thanh. Hãy ghi lại bằng định dạng WAV, hoặc cài "
-        "ffmpeg để đọc được AAC/MP3. (" + "; ".join(failures) + ")",
+        "Không đọc được file âm thanh. Bản ghi từ iPhone là AAC trong file M4A, "
+        "cần FFmpeg để giải mã. Cài FFmpeg rồi mở lại backend, hoặc chuyển sang "
+        "nhà cung cấp ElevenLabs. (" + "; ".join(failures) + ")",
     )
+
+
+def _decode_with_ffmpeg(path: Path) -> Tuple[Any, int]:
+    """Decode through the ``ffmpeg`` CLI, which reads every container we get."""
+    import subprocess
+    import tempfile
+
+    import numpy as np
+    import soundfile as sf
+
+    with tempfile.TemporaryDirectory() as workdir:
+        target = Path(workdir) / "decoded.wav"
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-i",
+                str(path),
+                "-ac",
+                "1",
+                "-ar",
+                str(CLONE_SAMPLE_RATE),
+                "-c:a",
+                "pcm_s16le",
+                str(target),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0 or not target.is_file():
+            raise RuntimeError(
+                f"exit {result.returncode}: {_brief_text(result.stderr)}"
+            )
+        data, rate = sf.read(str(target), dtype="float32", always_2d=True)
+        return np.ascontiguousarray(data.mean(axis=1), dtype="float32"), int(rate)
+
+
+def _brief_text(text: str, limit: int = 160) -> str:
+    """One line of command output, without the noise around it."""
+    collapsed = " ".join((text or "").split())
+    return collapsed if len(collapsed) <= limit else collapsed[:limit] + "…"
 
 
 def _brief(error: Exception, limit: int = 160) -> str:
     """One line of a decoder failure, without the multi-paragraph traceback."""
-    text = " ".join(str(error).split())
-    return text if len(text) <= limit else text[:limit] + "…"
+    return _brief_text(str(error), limit)
 
 
 def normalize_sample(path: Path) -> Path:
-    """Rewrite any recording in place as mono 16-bit PCM WAV.
+    """Rewrite any recording as mono 16-bit PCM WAV and return the new path.
 
     The phone decides the container, not us: iOS returns AAC in an M4A file and
     Android varies between 16 and 24-bit PCM. ``wave`` and ``soundfile`` read
     PCM only, so the upload is decoded once, here, where a decoder exists.
+
+    The result is a *different path*: libsndfile picks its output format from
+    the file extension, so it cannot write a WAV back into a file called
+    ``.m4a`` and would raise instead of converting.
     """
     if is_pcm_wav(path):
         return path
@@ -263,12 +320,13 @@ def normalize_sample(path: Path) -> Path:
     if rate != CLONE_SAMPLE_RATE:
         samples = _resample(samples, rate, CLONE_SAMPLE_RATE)
 
-    sf.write(str(path), samples, CLONE_SAMPLE_RATE, subtype="PCM_16")
+    converted = path.with_name(f"{path.stem}.wav")
+    sf.write(str(converted), samples, CLONE_SAMPLE_RATE, subtype="PCM_16")
     log(
         f"Đã chuyển mẫu âm thanh sang WAV {CLONE_SAMPLE_RATE}Hz 16-bit "
-        f"(mẫu gốc {rate}Hz)."
+        f"(mẫu gốc {path.suffix or '?'} {rate}Hz)."
     )
-    return path
+    return converted
 
 
 def _resample(samples: Any, source_rate: int, target_rate: int) -> Any:
@@ -603,8 +661,7 @@ def command_clone(params: Dict[str, Any]) -> Dict[str, Any]:
     if not raw_path:
         raise SidecarError("ValidationError", "Thiếu file âm thanh mẫu.")
 
-    sample = Path(str(raw_path))
-    normalize_sample(sample)
+    sample = normalize_sample(Path(str(raw_path)))
     validate_sample(sample)
 
     language = (params.get("language") or DEFAULT_CLONE_LANGUAGE).strip().lower()

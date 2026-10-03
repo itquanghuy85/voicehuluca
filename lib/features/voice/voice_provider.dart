@@ -16,6 +16,7 @@ import 'package:voice_huluca/data/datasources/local/app_database.dart'
     hide Voice;
 import 'package:voice_huluca/core/network/backend_discovery.dart';
 import 'package:voice_huluca/core/network/backend_endpoint.dart';
+import 'package:voice_huluca/core/network/network_failure.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/remote/tts_remote_datasource.dart';
@@ -490,16 +491,31 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
 /// Voice-list failures in the user's language.
 String mapError(Object error) {
   if (error is TtsProviderException) {
-    return mapTtsErrorKind(error.kind, endpoint: error.endpoint);
+    return mapTtsErrorKind(
+      error.kind,
+      endpoint: error.endpoint,
+      failure: error.failure,
+      statusCode: error.statusCode,
+      detail: _detailOf(error),
+    );
   }
   // A transport error that reached this far still means the voice server is
   // unreachable, so say that instead of a generic failure.
   if (error is SocketException ||
       error is http.ClientException ||
       error is TimeoutException) {
-    return AppStrings.errorBackendUnreachable;
+    return _networkMessage('', classifyNetworkFailure(error));
   }
   return AppStrings.errorUnknown;
+}
+
+/// The server's own explanation, when it sent one, so the user sees the real
+/// reason ("Mẫu âm thanh dài 2.0s") instead of a status code.
+String _detailOf(TtsProviderException error) {
+  if (error.statusCode == 0) return '';
+  final body = error.message;
+  if (body.isEmpty || body.startsWith('Failed to ')) return '';
+  return body;
 }
 
 /// Single mapping from provider error kind to user-facing text.
@@ -507,14 +523,18 @@ String mapError(Object error) {
 /// [endpoint] is the address the call was aimed at. A self-hosted backend is
 /// reached by IP, so a wrong or missing address is the most common failure and
 /// the message has to name it.
-String mapTtsErrorKind(TtsErrorKind kind, {String endpoint = ''}) {
+String mapTtsErrorKind(
+  TtsErrorKind kind, {
+  String endpoint = '',
+  NetworkFailure failure = NetworkFailure.unknown,
+  int statusCode = 0,
+  String detail = '',
+}) {
   switch (kind) {
     case TtsErrorKind.unconfigured:
       return AppStrings.errorBackendNotConfigured;
     case TtsErrorKind.network:
-      return endpoint.isEmpty
-          ? AppStrings.errorBackendUnreachable
-          : AppStrings.errorBackendUnreachableAt(endpoint);
+      return _networkMessage(endpoint, failure);
     case TtsErrorKind.unauthorized:
       return AppStrings.errorUnauthorized;
     case TtsErrorKind.paymentRequired:
@@ -526,14 +546,36 @@ String mapTtsErrorKind(TtsErrorKind kind, {String endpoint = ''}) {
     case TtsErrorKind.rateLimit:
       return AppStrings.errorRateLimit;
     case TtsErrorKind.server:
-      return AppStrings.errorServer;
+      return statusCode > 0
+          ? AppStrings.errorBackendServer(statusCode, detail)
+          : AppStrings.errorServer;
     case TtsErrorKind.unsupported:
       return AppStrings.errorProviderUnsupported;
     case TtsErrorKind.unavailable:
       return AppStrings.errorProviderUnavailable;
     case TtsErrorKind.validation:
-      return AppStrings.errorInvalidRequest;
+      return statusCode > 0
+          ? AppStrings.errorBackendClient(statusCode, detail)
+          : AppStrings.errorInvalidRequest;
     case TtsErrorKind.unknown:
       return AppStrings.errorUnknown;
   }
+}
+
+/// Each way of failing to reach the backend needs a different fix, so each is
+/// named instead of being collapsed into "không kết nối được".
+String _networkMessage(String endpoint, NetworkFailure failure) {
+  final target = endpoint.isEmpty ? 'máy chủ giọng nói' : endpoint;
+  return switch (failure) {
+    NetworkFailure.refused => AppStrings.errorBackendRefused(target),
+    NetworkFailure.timedOut => AppStrings.errorBackendTimedOut(target),
+    NetworkFailure.unreachable => AppStrings.errorBackendUnreachableRoute(
+      target,
+    ),
+    NetworkFailure.dns => AppStrings.errorBackendDns(target),
+    NetworkFailure.tls => AppStrings.errorBackendTls(target),
+    NetworkFailure.unknown => endpoint.isEmpty
+        ? AppStrings.errorBackendUnreachable
+        : AppStrings.errorBackendUnreachableAt(endpoint),
+  };
 }

@@ -85,6 +85,13 @@ class _FakeTtsRepository implements TtsRepository {
 
   @override
   Future<TtsUsage?> getUsage() async => null;
+
+  @override
+  Future<BackendHealth> checkHealth() async => const BackendHealth(
+    service: 'vietvoice-backend',
+    version: 'test',
+    providers: {},
+  );
 }
 
 /// Yields a completed response with no audio payload.

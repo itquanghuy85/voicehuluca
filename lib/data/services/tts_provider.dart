@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../core/network/network_failure.dart';
 import '../models/voice.dart';
 
 /// Provider identifiers used across the app, the backend contract and storage.
@@ -127,12 +128,17 @@ class TtsProviderException implements Exception {
   /// address was tried.
   final String endpoint;
 
+  /// What went wrong below the HTTP layer, so the user is told which of
+  /// "server not running", "wrong network" and "bad address" applies.
+  final NetworkFailure failure;
+
   const TtsProviderException(
     this.message, {
     this.statusCode = 0,
     this.kind = TtsErrorKind.unknown,
     this.providerId = '',
     this.endpoint = '',
+    this.failure = NetworkFailure.unknown,
   });
 
   bool get isRetryable => switch (kind) {
@@ -195,4 +201,26 @@ abstract class TtsProvider {
   Future<TtsUsage?> getUsage();
 
   Future<bool> testConnection();
+}
+
+/// What `GET /v1/health` reported, used to tell "the backend is down" apart
+/// from "the backend is up but this provider has no key".
+class BackendHealth {
+  const BackendHealth({
+    required this.service,
+    required this.version,
+    required this.providers,
+  });
+
+  final String service;
+  final String version;
+  final Map<String, bool> providers;
+
+  /// True when this really is a VietVoice backend rather than something else
+  /// answering on the configured port.
+  bool get isVietVoiceBackend => service == 'vietvoice-backend';
+
+  /// Whether the backend can clone with [providerId] right now, which is false
+  /// when that provider has no credentials configured.
+  bool canClone(String providerId) => providers[providerId] ?? false;
 }
