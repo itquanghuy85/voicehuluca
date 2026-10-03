@@ -22,9 +22,23 @@ import 'package:voice_huluca/features/voice/voice_provider.dart'
         mapError,
         ttsProviderIdProvider,
         httpClientFactoryProvider,
-        voiceListProvider;
+        voiceListProvider,
+        backendUrlProvider,
+        BackendUrlNotifier,
+        mapTtsErrorKind;
 
 const String _baseUrl = 'https://backend.test/v1';
+
+/// Pins the backend address so these tests exercise voice loading rather than
+/// how an unconfigured build resolves its address.
+class _FixedBackendUrl extends BackendUrlNotifier {
+  _FixedBackendUrl(this.url);
+
+  final String url;
+
+  @override
+  String build() => url;
+}
 
 http.Response _json(Object body, int status) => http.Response.bytes(
   utf8.encode(jsonEncode(body)),
@@ -433,6 +447,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
+          backendUrlProvider.overrideWith(() => _FixedBackendUrl(_baseUrl)),
           httpClientFactoryProvider.overrideWithValue(
             () => MockClient((request) async {
               requested.add(request.url.queryParameters['provider'] ?? '');
@@ -478,6 +493,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            backendUrlProvider.overrideWith(() => _FixedBackendUrl(_baseUrl)),
             httpClientFactoryProvider.overrideWithValue(
               () => MockClient(
                 (_) async => _json({
@@ -535,6 +551,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            backendUrlProvider.overrideWith(() => _FixedBackendUrl(_baseUrl)),
             httpClientFactoryProvider.overrideWithValue(
               () => MockClient(
                 (_) async => _json({
@@ -601,6 +618,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            backendUrlProvider.overrideWith(() => _FixedBackendUrl(_baseUrl)),
             httpClientFactoryProvider.overrideWithValue(
               () => MockClient(
                 (_) async => throw const SocketException('Connection refused'),
@@ -618,9 +636,39 @@ void main() {
         // The message names the address that was dialled: a self-hosted
         // backend is reached by IP, so that is the thing worth showing.
         expect(state.error, contains('Không kết nối được máy chủ giọng nói'));
-        expect(state.error, contains(AppConstants.apiBaseUrl));
+        expect(state.error, contains(_baseUrl));
       },
     );
+
+    test('an unconfigured app asks for an address instead of dialling', () async {
+      var called = false;
+      final datasource = TtsRemoteDatasource(
+        client: MockClient((_) async {
+          called = true;
+          return _json({'voices': <Map<String, dynamic>>[]}, 200);
+        }),
+        // What a fresh install looks like: no stored address, no dart-define.
+        baseUrl: AppConstants.apiBaseUrl,
+        apiKey: '',
+        provider: TtsProviderIds.google,
+      );
+
+      await expectLater(
+        datasource.getVoices(),
+        throwsA(
+          isA<TtsProviderException>().having(
+            (error) => error.kind,
+            'kind',
+            TtsErrorKind.unconfigured,
+          ),
+        ),
+      );
+      expect(called, isFalse, reason: 'nothing should reach the network');
+      expect(
+        mapTtsErrorKind(TtsErrorKind.unconfigured),
+        AppStrings.errorBackendNotConfigured,
+      );
+    });
 
     test('a raw socket error maps to the same guidance', () {
       expect(

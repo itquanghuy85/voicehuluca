@@ -315,6 +315,8 @@ class AppStrings {
   static const String settingsBackendSave = 'Lưu';
   static const String settingsBackendSaved = 'Đã lưu địa chỉ máy chủ.';
   static const String settingsBackendReset = 'Dùng mặc định';
+  static const String settingsBackendNotSet =
+      'Chưa có địa chỉ. Bấm "Dò trong mạng LAN" hoặc nhập IP máy chủ.';
   static const String settingsBackendScan = 'Dò mạng LAN';
   static const String settingsBackendScanning = 'Đang dò {0}/{1}...';
   static const String settingsBackendScanFound = 'Tìm thấy {0} máy chủ.';
@@ -359,8 +361,14 @@ class AppStrings {
   /// almost always wrong.
   static String errorBackendUnreachableAt(String endpoint) =>
       'Không kết nối được máy chủ giọng nói tại $endpoint.\n'
-      'Kiểm tra backend đang chạy và địa chỉ trong Cài đặt → Kết nối dịch vụ. '
-      'Nếu địa chỉ trống, app đang dùng $endpoint — hãy nhập IP của máy chạy backend.';
+      'Kiểm tra backend đang chạy và địa chỉ trong Cài đặt → Kết nối dịch vụ.';
+
+  /// Nothing was dialled because no address has been set. Distinct from
+  /// [errorBackendUnreachable]: the fix is to give the app an address, not to go
+  /// and start a server.
+  static const String errorBackendNotConfigured =
+      'Chưa có địa chỉ máy chủ giọng nói. Mở Cài đặt → Kết nối dịch vụ, bấm "Dò trong mạng LAN" hoặc nhập IP của máy đang chạy backend.';
+
   static const String errorUnauthorized =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   static const String errorQuotaExceeded =

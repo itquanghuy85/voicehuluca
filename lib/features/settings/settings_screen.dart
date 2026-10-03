@@ -415,7 +415,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// typing its address or by letting the app find it on the same Wi-Fi.
   Widget _buildBackendSection(AppColorScheme colorScheme) {
     final activeUrl = ref.watch(backendUrlProvider);
-    final usingDefault = activeUrl == AppConstants.apiBaseUrl;
+    // A build without --dart-define carries no address, so "no address" and
+    // "the address this build was compiled with" are both just an empty string.
+    final notConfigured = activeUrl.isEmpty;
+    final usingDefault = notConfigured || activeUrl == AppConstants.apiBaseUrl;
 
     return _buildSection(
       title: AppStrings.settingsBackendTitle,
@@ -452,13 +455,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  usingDefault
+                  notConfigured
+                      ? AppStrings.settingsBackendNotSet
+                      : usingDefault
                       ? '${AppStrings.settingsBackendCurrent}: $activeUrl'
                       : activeUrl,
                   style: AppTypography.bodySmall.copyWith(
-                    color: colorScheme.textTertiary,
+                    color: notConfigured
+                        ? colorScheme.error
+                        : colorScheme.textTertiary,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -523,7 +530,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              if (!usingDefault)
+              if (!notConfigured)
                 CupertinoButton(
                   onPressed: _resetBackendUrl,
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),

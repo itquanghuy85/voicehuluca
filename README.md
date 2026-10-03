@@ -310,11 +310,17 @@ flutter build web --release
 
 ```dart
 // lib/core/constants/app_constants.dart
-static const String apiBaseUrl = 'https://api.vietvoice.studio/v1';
-static const String websocketUrl = 'wss://stream.vietvoice.studio';
+// Empty unless the build passes API_BASE_URL. The backend is self-hosted, so
+// there is no public default to fall back on.
+static const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 ```
 
-Override at build time:
+With no address compiled in, the app scans the LAN once on first run and
+otherwise waits for the address to be typed in **Settings → Kết nối dịch vụ**
+(or found with **"Dò trong mạng LAN"**). Requests fail with a message saying an
+address is needed rather than dialling a placeholder host.
+
+Override at build time to pin an address:
 
 ```bash
 flutter build apk --release --dart-define=API_BASE_URL=https://api.vietvoice.studio/v1

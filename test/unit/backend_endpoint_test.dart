@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_huluca/core/constants/app_constants.dart';
 import 'package:voice_huluca/core/network/backend_discovery.dart';
 import 'package:voice_huluca/core/network/backend_endpoint.dart';
 
@@ -54,13 +55,15 @@ void main() {
       expect(BackendEndpoint.parse('http://').url, isNull);
     });
 
-    test('a stored address falls back to the compiled default', () {
-      expect(BackendEndpoint.resolve(null), isNotEmpty);
+    test('nothing stored falls back to the address compiled into the build', () {
+      // Empty unless the build passes --dart-define=API_BASE_URL, and that is
+      // deliberate: a placeholder public host only produced DNS timeouts.
+      expect(BackendEndpoint.resolve(null), AppConstants.apiBaseUrl);
       expect(
         BackendEndpoint.resolve('192.168.1.20:3000'),
         'http://192.168.1.20:3000/v1',
       );
-      expect(BackendEndpoint.resolve('nonsense://'), isNotEmpty);
+      expect(BackendEndpoint.resolve('nonsense://'), AppConstants.apiBaseUrl);
     });
 
     test('host and port can be read back for display and probing', () {

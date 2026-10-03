@@ -48,10 +48,11 @@ class AppConstants {
     2.0,
   ];
 
-  static const String apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://api.vietvoice.studio/v1',
-  );
+  /// Backend address compiled into the build. Empty means "not configured": the
+  /// app is self-hosted, so there is no sensible public default to fall back on
+  /// and a placeholder host only produced DNS timeouts. An empty value makes the
+  /// app find the backend on the LAN or ask for its address instead.
+  static const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
   static const String websocketUrl = 'wss://stream.vietvoice.studio';
 
   /// Provider used until the user picks another one in Settings.

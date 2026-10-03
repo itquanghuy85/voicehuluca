@@ -110,6 +110,10 @@ enum TtsErrorKind {
   unavailable,
   validation,
   unknown,
+
+  /// No backend address has been set. Distinct from [network] because nothing
+  /// was dialled: the user has to type an IP or let the app find one on the LAN.
+  unconfigured,
 }
 
 class TtsProviderException implements Exception {

@@ -322,6 +322,8 @@ class CloningNotifier extends Notifier<CloningState> {
     }
     if (error is TtsProviderException) {
       switch (error.kind) {
+        case TtsErrorKind.unconfigured:
+          return AppStrings.errorBackendNotConfigured;
         case TtsErrorKind.unsupported:
           return AppStrings.cloningUnsupportedMessage;
         case TtsErrorKind.unauthorized:

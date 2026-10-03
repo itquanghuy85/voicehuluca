@@ -14,6 +14,7 @@ import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/core/utils/connectivity_utils.dart';
 import 'package:voice_huluca/data/datasources/local/app_database.dart'
     hide Voice;
+import 'package:voice_huluca/core/network/backend_discovery.dart';
 import 'package:voice_huluca/core/network/backend_endpoint.dart';
 import 'package:voice_huluca/data/datasources/local/settings_local_datasource.dart';
 import 'package:voice_huluca/data/datasources/local/voice_local_datasource.dart';
@@ -196,8 +197,8 @@ final httpClientFactoryProvider = Provider<http.Client Function()>((ref) {
 /// Base URL of the backend the app talks to.
 ///
 /// Stored in settings so one build works on any machine: the user either types
-/// an address or picks one found on the LAN. Null in storage means "use the
-/// address this build was compiled with".
+/// an address or picks one found on the LAN. Empty means "not configured yet",
+/// which is what a fresh install looks like.
 final backendUrlProvider = NotifierProvider<BackendUrlNotifier, String>(
   BackendUrlNotifier.new,
 );
@@ -221,6 +222,32 @@ class BackendUrlNotifier extends Notifier<String> {
     final url = BackendEndpoint.resolve(stored);
     if (url != state) {
       state = url;
+    }
+    if (url.isNotEmpty) return;
+
+    // Nothing configured yet, and this build carries no address. Rather than
+    // leave the app pointing at a placeholder host, look for the backend on the
+    // Wi-Fi the phone is already on. This is the same scan the Settings button
+    // runs, done once in the background.
+    await _adoptDiscoveredBackend();
+  }
+
+  /// Scans the LAN once and remembers the fastest backend that answers. Returns
+  /// the address that was stored, or null when none was found.
+  Future<String?> _adoptDiscoveredBackend() async {
+    try {
+      final found = await const LanBackendScanner().scan(
+        timeout: const Duration(milliseconds: 400),
+      );
+      if (_disposed) return null;
+      final best = found.isEmpty ? null : found.first.baseUrl;
+      if (best == null) return null;
+      await setUrl(best);
+      return best;
+    } on Object {
+      // Discovery is a convenience: a phone with no LAN, or a platform channel
+      // that is unavailable in tests, must leave the app usable.
+      return null;
     }
   }
 
@@ -482,6 +509,8 @@ String mapError(Object error) {
 /// the message has to name it.
 String mapTtsErrorKind(TtsErrorKind kind, {String endpoint = ''}) {
   switch (kind) {
+    case TtsErrorKind.unconfigured:
+      return AppStrings.errorBackendNotConfigured;
     case TtsErrorKind.network:
       return endpoint.isEmpty
           ? AppStrings.errorBackendUnreachable

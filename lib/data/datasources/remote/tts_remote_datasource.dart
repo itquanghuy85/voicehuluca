@@ -46,24 +46,33 @@ class TtsRemoteDatasource {
     'x-vvt-api-key': apiKey,
   };
 
-  /// Turns transport failures into one typed error.
-  ///
-  /// The backend is a self-hosted proxy, so a refused connection, a wrong
-  /// address or a timeout all mean "the voice server is not answering" and must
-  /// not reach the UI as an unknown provider error.
-  Future<T> _guard<T>(Future<T> Function() call) async {
-    try {
-      return await call();
-    } on http.ClientException catch (error) {
-      throw _unreachable(error.message);
-    } on SocketException catch (error) {
-      throw _unreachable(error.message);
-    } on HandshakeException catch (error) {
-      throw _unreachable(error.message);
-    } on TimeoutException {
-      throw _unreachable('Yêu cầu quá thời gian.');
-    }
+/// Turns transport failures into one typed error.
+///
+/// The backend is a self-hosted proxy, so a refused connection, a wrong
+/// address or a timeout all mean "the voice server is not answering" and must
+/// not reach the UI as an unknown provider error.
+Future<T> _guard<T>(Future<T> Function() call) async {
+  if (baseUrl.trim().isEmpty) {
+    // Nothing was dialled, so saying "unreachable" would be a lie: the user has
+    // to give the app an address first.
+    throw TtsProviderException(
+      'Chưa cấu hình địa chỉ máy chủ giọng nói.',
+      kind: TtsErrorKind.unconfigured,
+      providerId: provider,
+    );
   }
+  try {
+    return await call();
+  } on http.ClientException catch (error) {
+    throw _unreachable(error.message);
+  } on SocketException catch (error) {
+    throw _unreachable(error.message);
+  } on HandshakeException catch (error) {
+    throw _unreachable(error.message);
+  } on TimeoutException {
+    throw _unreachable('Yêu cầu quá thời gian.');
+  }
+}
 
 TtsProviderException _unreachable(String detail) => TtsProviderException(
       'Máy chủ giọng nói không phản hồi: $detail',
