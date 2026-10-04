@@ -20,3 +20,15 @@ const RecordConfig recordVoiceConfig = RecordConfig(
 /// Sample length XTTS works best in.
 const Duration recordVoiceMinDuration = Duration(seconds: 5);
 const Duration recordVoiceMaxDuration = Duration(seconds: 30);
+
+/// How early the recorder stops itself so the file stays inside the limit.
+///
+/// The sidecar rejects anything longer than [recordVoiceMaxDuration], and the
+/// recorder keeps writing for a moment after the stop request lands. Stopping on
+/// the counter alone therefore produced ~30.7s files for a 30s cap, which the
+/// backend then refused with `SampleTooLong` after the user had already recorded.
+const Duration recordVoiceStopMargin = Duration(seconds: 1);
+
+/// Length the recorder actually stops at: the cap minus [recordVoiceStopMargin].
+Duration get recordVoiceStopAt =>
+    recordVoiceMaxDuration - recordVoiceStopMargin;

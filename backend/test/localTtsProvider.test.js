@@ -21,12 +21,17 @@ const {
 /**
  * Fake python process: answers each JSON request from a scripted map, so the
  * tests cover the protocol, error mapping and crash handling without Python.
+ *
+ * With `serial: true` it behaves like the real sidecar, which reads one request
+ * at a time and answers it before reading the next: responses wait in a queue
+ * until the test calls `child.flush()`.
  */
-function createFakeSidecar(handlers) {
+function createFakeSidecar(handlers, { serial = false } = {}) {
   const child = new EventEmitter();
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.killed = false;
+  const held = [];
   child.stdin = new PassThrough();
   child.stdin.on('data', (chunk) => {
     for (const line of String(chunk).split('\n')) {
@@ -37,7 +42,11 @@ function createFakeSidecar(handlers) {
         const response = handler(request);
         // `undefined` means "stay silent" so a pending request can be crashed.
         if (response !== undefined) {
-          child.stdout.write(`${JSON.stringify(response)}\n`);
+          if (serial) {
+            held.push(response);
+          } else {
+            child.stdout.write(`${JSON.stringify(response)}\n`);
+          }
         }
         continue;
       }
@@ -46,20 +55,34 @@ function createFakeSidecar(handlers) {
       );
     }
   });
+  /** Releases the oldest held response, the way a finished command would. */
+  child.flush = () => {
+    const response = held.shift();
+    if (!response) return false;
+    child.stdout.write(`${JSON.stringify(response)}\n`);
+    return true;
+  };
   child.kill = () => {
     child.killed = true;
+    // A real child emits 'exit' when it is killed, which is what rejects
+    // whatever request was still in flight.
+    child.emit('exit', 1);
   };
   return child;
 }
 
 /** Pretend the sidecar is configured, then restore the real value. */
-function withConfiguredSidecar(t, handlers) {
+function withConfiguredSidecar(t, handlers, options = {}) {
   const previous = config.localTtsPython;
   config.localTtsPython = 'python';
   t.after(() => {
     config.localTtsPython = previous;
   });
-  return new LocalTtsProvider(() => createFakeSidecar(handlers));
+  const { timeouts, ...fakeOptions } = options;
+  return new LocalTtsProvider(
+    () => createFakeSidecar(handlers, fakeOptions),
+    timeouts
+  );
 }
 
 test('provider id "local" is a known provider', () => {
@@ -270,6 +293,120 @@ test('a broken sidecar pipe rejects pending requests instead of crashing', async
     pending,
     (error) => error.code === 'LocalTtsCrashed' && error.statusCode === 503
   );
+  provider.dispose();
+});
+
+test('a command queued behind a synthesis is not cut short', async (t) => {
+  // The sidecar answers one request at a time, so `list-voices` sent while a
+  // synthesis is running has to wait for all of it. Judged on its own 40ms
+  // budget it used to time out while the sidecar was perfectly healthy.
+  const provider = withConfiguredSidecar(
+    t,
+    {
+      synth: (request) => ({
+        id: request.id,
+        ok: true,
+        data: {
+          audioBase64: Buffer.from([0xff, 0xf3, 0x64]).toString('base64'),
+          format: 'wav',
+          engine: 'xtts_v2',
+        },
+      }),
+      'list-voices': (request) => ({
+        id: request.id,
+        ok: true,
+        data: { voices: [], edge_count: 0, clone_count: 0 },
+      }),
+    },
+    { serial: true, timeouts: { 'list-voices': 40 } }
+  );
+
+  const synthesis = provider.synthesize({
+    voiceId: `${LOCAL_CLONE_PREFIX}abc`,
+    text: 'xin chào',
+  });
+  const voices = provider.listVoices('vi');
+  const child = provider.child;
+
+  const outcome = await Promise.race([
+    voices.then(() => 'settled', () => 'settled'),
+    new Promise((resolve) => setTimeout(() => resolve('still queued'), 150)),
+  ]);
+  assert.equal(outcome, 'still queued');
+  assert.equal(child.killed, false);
+
+  // Releasing the synthesis lets the queued command answer normally.
+  child.flush();
+  child.flush();
+  assert.deepEqual(await voices, []);
+  assert.equal((await synthesis).engine, 'xtts_v2');
+  provider.dispose();
+});
+
+test('a command that times out does not kill the job already running', async (t) => {
+  // Regression: the timeout handler restarted the shared child, and the exit
+  // handler then failed whatever was still running with a 503 the user could do
+  // nothing about. In the request log a `list-voices` arriving 30s into a
+  // generation turned both generations into 503s.
+  let cloneId;
+  const provider = withConfiguredSidecar(
+    t,
+    {
+      clone: (request) => {
+        cloneId = request.id;
+        return undefined;
+      },
+      synth: () => undefined,
+    },
+    // Both are long commands, so neither waits for the other and the synth gives
+    // up while the clone is still loading the model.
+    { timeouts: { clone: 5_000, synth: 60 } }
+  );
+
+  const cloning = provider.cloneVoice({
+    name: 'Giọng của tôi',
+    samplePath: 'C:/tmp/a.wav',
+  });
+  const synthesis = provider.synthesize({
+    voiceId: `${LOCAL_CLONE_PREFIX}abc`,
+    text: 'xin chào',
+  });
+  const child = provider.child;
+
+  await assert.rejects(synthesis, (error) => error.code === 'LocalTtsTimeout');
+  assert.equal(child.killed, false);
+
+  child.stdout.write(
+    `${JSON.stringify({
+      id: cloneId,
+      ok: true,
+      data: {
+        voice_id: `${LOCAL_CLONE_PREFIX}new1`,
+        id: 'new1',
+        name: 'Giọng của tôi',
+        language: 'vi',
+        created_at: '2026-01-01T00:00:00Z',
+        modelReady: true,
+      },
+    })}\n`
+  );
+  assert.equal((await cloning).voiceId, `${LOCAL_CLONE_PREFIX}new1`);
+  provider.dispose();
+});
+
+test('a wedged sidecar with nothing else in flight is still restarted', async (t) => {
+  const provider = withConfiguredSidecar(
+    t,
+    { 'list-clones': () => undefined },
+    { timeouts: { 'list-clones': 30 } }
+  );
+
+  const pending = provider.listClones();
+  const child = provider.child;
+
+  await assert.rejects(pending, (error) => error.code === 'LocalTtsTimeout');
+  // With no other request to protect, a fresh child is still the right answer.
+  assert.equal(child.killed, true);
   provider.dispose();
 });
 

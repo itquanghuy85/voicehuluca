@@ -50,6 +50,19 @@ MAX_SAMPLE_SECONDS = 30.0
 # only understands linear PCM. Whatever the phone recorded gets decoded to this
 # rate before anything else looks at it.
 CLONE_SAMPLE_RATE = 24000
+# XTTS decoding knobs. Left at the library defaults the clones came out roughly
+# four times slower than the app promised: 88 characters took 28s (3.1 chars/s
+# against an estimate of ~14), with long silences between the phrases.
+#
+# The cause is `do_sample=True` together with `temperature=0.75`: sampling that
+# hot lets the decoder pad a sentence with pauses, and `length_penalty=1.0`
+# never pulls it back. A cooler temperature plus a length penalty below 1 keeps
+# the cadence tight. `repetition_penalty` stays at the library default because
+# raising it flattens a cloned voice, and the text splitter runs instead of the
+# sentence splitter so long scripts are chunked exactly once.
+XTTS_TEMPERATURE = 0.3
+XTTS_LENGTH_PENALTY = 0.8
+XTTS_REPETITION_PENALTY = 10.0
 # The public Edge endpoint sometimes answers with no audio when requests arrive
 # in bursts; a few retries turn that into a non-event for the user.
 EDGE_ATTEMPTS = 3
@@ -603,6 +616,11 @@ def xtts_synthesize(
             language=normalize_xtts_language(language),
             file_path=str(output),
             speed=speed if speed and speed > 0 else 1.0,
+            split_sentences=False,
+            temperature=XTTS_TEMPERATURE,
+            length_penalty=XTTS_LENGTH_PENALTY,
+            repetition_penalty=XTTS_REPETITION_PENALTY,
+            enable_text_splitting=True,
         )
     except Exception as error:
         raise SidecarError(

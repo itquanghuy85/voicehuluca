@@ -13,7 +13,13 @@ enum LibraryFilter { all, recent, favorites }
 
 /// Maps a voice id to its display name so the library can show which voice was
 /// used for each audio instead of a placeholder.
+///
+/// Watches the library's [LibraryState.revision] so the names are read again
+/// whenever the list reloads. Without that it was resolved once at app start:
+/// `HomeScreen` keeps every tab alive in an `IndexedStack`, so a voice cloned
+/// later in the session was never in the map and its audio read "unknown".
 final libraryVoiceNamesProvider = FutureProvider<Map<int, String>>((ref) async {
+  ref.watch(libraryProvider.select((state) => state.revision));
   final database = ref.watch(appDatabaseProvider);
   final voices = await database.getAllVoices();
   return {for (final voice in voices) voice.id: voice.name};
@@ -29,6 +35,9 @@ class LibraryState {
   final bool hasMore;
   final int currentPage;
 
+  /// Bumped on every successful load so dependents know the list was replaced.
+  final int revision;
+
   const LibraryState({
     this.audios = const [],
     this.filter = LibraryFilter.all,
@@ -38,6 +47,7 @@ class LibraryState {
     this.error,
     this.hasMore = true,
     this.currentPage = 0,
+    this.revision = 0,
   });
 
   LibraryState copyWith({
@@ -49,6 +59,7 @@ class LibraryState {
     String? error,
     bool? hasMore,
     int? currentPage,
+    int? revision,
   }) {
     return LibraryState(
       audios: audios ?? this.audios,
@@ -59,6 +70,7 @@ class LibraryState {
       error: error,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
+      revision: revision ?? this.revision,
     );
   }
 }
@@ -118,6 +130,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
         isLoading: false,
         hasMore: audios.length > _pageSize,
         currentPage: 1,
+        revision: state.revision + 1,
         error: null,
       );
     } catch (e) {

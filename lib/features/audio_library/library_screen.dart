@@ -11,14 +11,20 @@ import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/storage/audio_export_service.dart';
+import '../../core/utils/share_origin.dart';
 import '../../data/models/audio_asset.dart';
 import '../audio_detail/audio_detail_screen.dart';
 import 'library_provider.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
-  const LibraryScreen({super.key, this.onCreateFirst});
+  const LibraryScreen({super.key, this.onCreateFirst, this.isActive = true});
 
   final VoidCallback? onCreateFirst;
+
+  /// True while this tab is the one on screen. `HomeScreen` keeps every tab
+  /// alive in an `IndexedStack`, so without this the list was read once at app
+  /// start and audio generated later never showed up.
+  final bool isActive;
 
   @override
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
@@ -40,6 +46,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(libraryProvider.notifier).loadLibrary();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant LibraryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      // Coming back to the tab is the only signal this screen gets, so re-read
+      // here. Kept non-refreshing so the previous list stays on screen instead
+      // of flashing empty while the query runs.
+      ref.read(libraryProvider.notifier).loadLibrary();
+    }
   }
 
   @override
@@ -137,6 +154,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   void _showAudioMenu(AudioAsset audio) {
+    // Captured before the sheet opens: its own context is gone once it closes.
+    final shareOrigin = shareOriginOf(context);
     showCupertinoModalPopup(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -166,6 +185,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               Share.share(
                 audio.filePath,
                 subject: AppStrings.libraryShareTitle,
+                sharePositionOrigin: shareOrigin,
               );
             },
             child: const Text(AppStrings.generationShare),
@@ -423,6 +443,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        // A short list cannot be dragged, which left pull-to-refresh dead
+        // exactly when the list was short enough to be stale.
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: state.audios.length + (state.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == state.audios.length) {

@@ -49,6 +49,12 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
 
   Timer? _timer;
   Duration _elapsed = Duration.zero;
+
+  /// Wall clock since the recorder opened the file. Adding a fixed step per tick
+  /// made the counter drift away from the audio, so the 30s cap could overshoot
+  /// into the range the backend rejects.
+  final Stopwatch _stopwatch = Stopwatch();
+
   String? _recordingPath;
   String? _error;
   bool _isRecording = false;
@@ -170,6 +176,9 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _isRecording = true;
       _recordingPath = path;
     });
+    _stopwatch
+      ..reset()
+      ..start();
 
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 200), (timer) async {
@@ -177,9 +186,10 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
         timer.cancel();
         return;
       }
-      setState(() => _elapsed += const Duration(milliseconds: 200));
+      final elapsed = _stopwatch.elapsed;
+      setState(() => _elapsed = elapsed);
       await _trackLevel();
-      if (_elapsed >= _maxDuration) {
+      if (elapsed >= recordVoiceStopAt) {
         await _stopRecording();
       }
     });
@@ -202,6 +212,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   Future<void> _stopRecording() async {
     _timer?.cancel();
     _timer = null;
+    _stopwatch.stop();
     try {
       final path = await _recorder.stop();
       if (!mounted) return;

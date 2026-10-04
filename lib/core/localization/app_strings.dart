@@ -1,3 +1,5 @@
+import '../audio/voice_sample_config.dart';
+
 class AppStrings {
   AppStrings._();
 
@@ -93,10 +95,14 @@ class AppStrings {
   static const String cloningVoiceNameHint = 'Nhập tên cho giọng nói của bạn';
   static const String cloningDescription = 'Mô tả';
   static const String cloningDescriptionHint = 'Mô tả ngắn về giọng nói';
-  static const String cloningMinDuration = 'Tối thiểu 10 giây';
-  static const String cloningMaxDuration = 'Tối đa 5 phút';
+  /// The sample window is the one the sidecar enforces, so these read the real
+  /// limits instead of repeating numbers that drifted away from them.
+  static final String cloningMinDuration =
+      'Tối thiểu ${recordVoiceMinDuration.inSeconds} giây';
+  static final String cloningMaxDuration =
+      'Tối đa ${recordVoiceMaxDuration.inSeconds} giây';
   static const String cloningRecommendedQuality =
-      'Chất lượng đề xuất: WAV, 44.1kHz, 16-bit';
+      'Chất lượng đề xuất: WAV, 22.05kHz, 16-bit, mono';
   static const String cloningSubmit = 'Tạo giọng nói';
   static const String cloningCancel = 'Hủy';
   static const String cloningSuccess = 'Nhân bản giọng nói thành công!';
@@ -122,8 +128,8 @@ class AppStrings {
   static const String cloningChecklistSingleSpeaker = 'Chỉ một người nói';
   static const String cloningChecklistNoMusic = 'Không nhạc nền';
   static const String cloningChecklistStableVolume = 'Giữ âm lượng ổn định';
-  static const String cloningChecklistNatural =
-      'Nội dung tự nhiên, rõ ràng (1-2 phút)';
+  static final String cloningChecklistNatural =
+      'Nội dung tự nhiên, rõ ràng (${recordVoiceMinDuration.inSeconds}-${recordVoiceMaxDuration.inSeconds} giây)';
   static const String cloningTranscript = 'Văn bản mẫu (tùy chọn)';
   static const String cloningTranscriptHint =
       'Nội dung bản ghi âm để tăng độ chính xác';
@@ -139,7 +145,8 @@ class AppStrings {
   static const String cloningDone = 'Xong';
   static const String cloningRetry = 'Thử lại';
   static const String cloningSelectFile = 'Chọn file audio';
-  static const String cloningRecordingLimit = 'Tối đa 2 phút';
+  static final String cloningRecordingLimit =
+      'Tối đa ${recordVoiceMaxDuration.inSeconds} giây';
   static const String cloningAudioReady = 'Âm thanh đã sẵn sàng';
   static const String cloningChangeAudio = 'Chọn lại';
   static const String cloningNameRequired = 'Vui lòng nhập tên giọng';
@@ -175,6 +182,12 @@ class AppStrings {
   static const String generationFinishing = 'Đang hoàn tất...';
   static const String generationCancelled = 'Đã hủy';
   static const String generationScreenTitle = 'Đang tạo giọng...';
+  /// A local clone is rendered by XTTS on the CPU, where even a short script
+  /// takes minutes. Naming that is more use than a bare "quá thời gian", which
+  /// reads as a broken connection and invites a retry that will be just as slow.
+  static const String generationTimeoutLocal =
+      'Máy chủ vẫn đang chạy mô hình giọng nói trên CPU nên lâu hơn dự kiến.\n'
+      'Hãy rút ngắn kịch bản, hoặc chuyển sang giọng Edge/ElevenLabs để tạo nhanh hơn.';
   static const String generationVoiceLabel = 'Giọng đọc';
   static const String generationCharacterCount = 'Số ký tự';
   static const String generationCancelConfirmTitle = 'Hủy tạo giọng?';
@@ -482,9 +495,10 @@ class AppStrings {
       'Cần quyền truy cập micrô để ghi âm.';
   static const String errorStoragePermission =
       'Cần quyền truy cập bộ nhớ để lưu tệp.';
-  static const String errorRecordingTooShort =
-      'Bản ghi quá ngắn. Tối thiểu 10 giây.';
-  static const String errorRecordingTooLong = 'Bản ghi quá dài. Tối đa 5 phút.';
+  static final String errorRecordingTooShort =
+      'Bản ghi quá ngắn. Tối thiểu ${recordVoiceMinDuration.inSeconds} giây.';
+  static final String errorRecordingTooLong =
+      'Bản ghi quá dài. Tối đa ${recordVoiceMaxDuration.inSeconds} giây.';
   static const String errorNoInternet = 'Không có kết nối internet.';
   static const String errorSsl = 'Lỗi chứng chỉ bảo mật.';
   static const String errorParsing = 'Lỗi xử lý dữ liệu phản hồi.';

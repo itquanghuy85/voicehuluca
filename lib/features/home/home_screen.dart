@@ -43,6 +43,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             const _HomeTabContent(),
             _LibraryTabContent(
+              isActive: _currentTab == 1,
               onCreateFirst: () => setState(() => _currentTab = 0),
             ),
             const _VoicesTabContent(),
@@ -1057,13 +1058,17 @@ class _VoicePickerSheet extends StatelessWidget {
 }
 
 class _LibraryTabContent extends StatelessWidget {
-  const _LibraryTabContent({required this.onCreateFirst});
+  const _LibraryTabContent({
+    required this.isActive,
+    required this.onCreateFirst,
+  });
 
+  final bool isActive;
   final VoidCallback onCreateFirst;
 
   @override
   Widget build(BuildContext context) {
-    return LibraryScreen(onCreateFirst: onCreateFirst);
+    return LibraryScreen(isActive: isActive, onCreateFirst: onCreateFirst);
   }
 }
 

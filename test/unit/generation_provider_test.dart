@@ -465,6 +465,72 @@ void main() {
     });
   });
 
+  group('The generation budget fits the provider', () {
+    test('streaming providers keep the flat budget', () {
+      // Google, Edge and ElevenLabs answer in seconds; a long script must not
+      // make the app wait longer for a call that is never slow.
+      expect(
+        generationTimeoutFor(
+          providerId: TtsProviderIds.google,
+          characters: AppConstants.maxScriptLength,
+        ),
+        AppConstants.generationTimeout,
+      );
+    });
+
+    test('a local clone is given room to finish on the CPU', () {
+      // Regression: the backend answered a 313s request with 200 thirteen
+      // seconds after the app had already shown "Tạo giọng nói thất bại".
+      // 209 characters is the measured case: 190s on the reference machine.
+      expect(
+        generationTimeoutFor(
+          providerId: TtsProviderIds.local,
+          characters: 209,
+        ),
+        AppConstants.localGenerationBaseTimeout +
+            const Duration(seconds: 190),
+      );
+    });
+
+    test('the budget grows with the script but stays bounded', () {
+      final short = generationTimeoutFor(
+        providerId: TtsProviderIds.local,
+        characters: 100,
+      );
+      final long = generationTimeoutFor(
+        providerId: TtsProviderIds.local,
+        characters: 2000,
+      );
+
+      expect(long, greaterThan(short));
+      // The longest script the editor accepts still fits under the ceiling.
+      expect(
+        generationTimeoutFor(
+          providerId: TtsProviderIds.local,
+          characters: AppConstants.maxScriptLength,
+        ),
+        lessThanOrEqualTo(AppConstants.localGenerationMaxTimeout),
+      );
+    });
+
+    test('the local timeout names the slow model instead of the network', () {
+      // A bare "quá thời gian" reads as a dropped connection and invites a retry
+      // that will be exactly as slow.
+      expect(
+        generationTimeoutMessageFor(TtsProviderIds.local),
+        AppStrings.generationTimeoutLocal,
+      );
+      expect(
+        generationTimeoutMessageFor(TtsProviderIds.local),
+        isNot(AppStrings.errorTimeout),
+      );
+      expect(
+        generationTimeoutMessageFor(TtsProviderIds.google),
+        AppStrings.errorTimeout,
+      );
+    });
+  });
+
   group('Repository keeps provider metadata on responses', () {
     test('synthesize reports which provider produced the audio', () async {
       final repository = TtsRepositoryImpl(

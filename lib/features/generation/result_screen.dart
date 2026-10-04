@@ -11,6 +11,7 @@ import 'package:voice_huluca/core/constants/app_constants.dart';
 import 'package:voice_huluca/core/design_system/design_tokens.dart';
 import 'package:voice_huluca/core/localization/app_strings.dart';
 import 'package:voice_huluca/core/storage/audio_export_service.dart';
+import 'package:voice_huluca/core/utils/share_origin.dart';
 import 'package:voice_huluca/domain/entities/audio_asset.dart';
 import 'package:voice_huluca/features/generation/generation_provider.dart';
 
@@ -1006,14 +1007,20 @@ class _SecondaryActions extends ConsumerWidget {
 
   Future<void> _share(BuildContext context, WidgetRef ref) async {
     final colors = AppColorScheme.of(Theme.of(context).brightness);
+    // Read before the first await: iPad needs the anchor and the context must
+    // not be touched again once this method has yielded.
+    final shareOrigin = shareOriginOf(context);
     try {
       final file = File(asset.filePath);
       if (await file.exists()) {
         await Share.shareXFiles([
           XFile(file.path),
-        ], text: AppStrings.resultSuccess);
+        ], text: AppStrings.resultSuccess, sharePositionOrigin: shareOrigin);
       } else {
-        await Share.share('${AppStrings.resultSuccess}\n${asset.fileName}');
+        await Share.share(
+          '${AppStrings.resultSuccess}\n${asset.fileName}',
+          sharePositionOrigin: shareOrigin,
+        );
       }
     } catch (_) {
       if (context.mounted) {

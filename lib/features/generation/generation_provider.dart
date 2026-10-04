@@ -170,6 +170,41 @@ typedef AudioFileWriter =
 /// Reads the real duration of a saved audio file.
 typedef AudioDurationReader = Future<Duration> Function(String filePath);
 
+/// How long to wait before giving up on a generation of [characters].
+///
+/// Streaming providers answer in seconds, so they keep the flat budget. The
+/// local provider is different: a cloned voice is rendered by XTTS on the CPU
+/// and its cost scales with the script, so the budget grows with the text. The
+/// old flat five minutes cut these requests off while the backend was still
+/// working, and the generation was reported as failed even though the audio
+/// arrived moments later.
+Duration generationTimeoutFor({
+  required String providerId,
+  required int characters,
+}) {
+  if (providerId != TtsProviderIds.local) {
+    return AppConstants.generationTimeout;
+  }
+  final allowance = Duration(
+    milliseconds:
+        (characters / AppConstants.localGenerationCharsPerSecond * 1000).round(),
+  );
+  final total = AppConstants.localGenerationBaseTimeout + allowance;
+  return total > AppConstants.localGenerationMaxTimeout
+      ? AppConstants.localGenerationMaxTimeout
+      : total;
+}
+
+/// What to say when a generation runs out of time.
+///
+/// A local clone that ran out of budget was never going to be quick, so it gets
+/// the message that names the slow model instead of one that reads like a
+/// dropped connection and invites a retry that will be just as slow.
+String generationTimeoutMessageFor(String providerId) =>
+    providerId == TtsProviderIds.local
+    ? AppStrings.generationTimeoutLocal
+    : AppStrings.errorTimeout;
+
 final generationProvider =
     StateNotifierProvider<GenerationNotifier, GenerationState>(
       (ref) => GenerationNotifier(
@@ -280,15 +315,22 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       );
 
       _timeoutTimer?.cancel();
-      _timeoutTimer = Timer(AppConstants.generationTimeout, () {
-        if (state.isBusy) {
-          _subscription?.cancel();
-          state = state.copyWith(
-            status: GenerationStatus.error,
-            errorMessage: AppStrings.errorTimeout,
-          );
-        }
-      });
+      final providerId = _activeProviderId();
+      _timeoutTimer = Timer(
+        generationTimeoutFor(
+          providerId: providerId,
+          characters: trimmed.length,
+        ),
+        () {
+          if (state.isBusy) {
+            _subscription?.cancel();
+            state = state.copyWith(
+              status: GenerationStatus.error,
+              errorMessage: generationTimeoutMessageFor(providerId),
+            );
+          }
+        },
+      );
 
       _subscription = stream.listen(
         _handleResponse,

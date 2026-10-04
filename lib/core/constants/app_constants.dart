@@ -16,7 +16,30 @@ class AppConstants {
   /// take minutes for a cloned voice) is never cut off by the HTTP client.
   static const Duration apiTimeout = Duration(minutes: 6);
   static const Duration connectionTimeout = Duration(seconds: 10);
+
+  /// Budget for one generation with a streaming provider.
+  ///
+  /// Google, Edge and ElevenLabs answer in seconds, so five minutes is already
+  /// generous and a wedged call still ends in a retryable error.
   static const Duration generationTimeout = Duration(minutes: 5);
+
+  /// Floor for a local generation, on top of the per-character allowance below.
+  static const Duration localGenerationBaseTimeout = Duration(minutes: 10);
+
+  /// How fast the local engine renders a clone, in characters per second.
+  ///
+  /// Measured on the reference machine (Core Ultra 5, no GPU): 209 characters
+  /// took 190s, so roughly 1.1. The flat [generationTimeout] was shorter than
+  /// this rate allows — a request the backend answered with 200 after 313s was
+  /// abandoned by the app 13 seconds before the audio arrived, which is what the
+  /// user saw as "Tạo giọng nói thất bại".
+  static const double localGenerationCharsPerSecond = 1.1;
+
+  /// Ceiling for a local generation, so a genuinely stuck request still ends.
+  ///
+  /// Sized for the longest script the editor accepts: 5000 characters at the
+  /// measured rate needs about 76 minutes, plus the base budget.
+  static const Duration localGenerationMaxTimeout = Duration(minutes: 90);
   static const Duration splashDuration = Duration(seconds: 2);
   static const Duration debounceDuration = Duration(milliseconds: 300);
   static const Duration snackBarDuration = Duration(seconds: 4);

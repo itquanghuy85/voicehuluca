@@ -10,14 +10,23 @@ export const LOCAL_PROVIDER_ID = 'local';
 export const LOCAL_CLONE_PREFIX = 'clone:';
 const DEFAULT_XTTS_MODEL = 'tts_models/multilingual/multi-dataset/xtts_v2';
 
-/** Cheap commands answer quickly; the first clone has to download the model. */
+/**
+ * Budgets for one sidecar command, measured on its own.
+ *
+ * `synth` is the outlier: a cloned voice goes through XTTS on the CPU, where 209
+ * characters took 190s, so a full-length script needs well over an hour. The old
+ * ten minutes cut those requests off while the sidecar was still working on them.
+ */
 const COMMAND_TIMEOUTS: Record<string, number> = {
   'list-voices': 30_000,
   'list-clones': 15_000,
   'delete-clone': 15_000,
   clone: 20 * 60_000,
-  synth: 10 * 60_000,
+  synth: 90 * 60_000,
 };
+
+/** Commands that hold the sidecar's single request loop for minutes. */
+const LONG_COMMANDS: ReadonlySet<string> = new Set(['clone', 'synth']);
 
 export type SidecarCommand = keyof typeof COMMAND_TIMEOUTS;
 
@@ -25,6 +34,10 @@ interface PendingRequest {
   resolve: (data: Record<string, unknown>) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
+  /** True while this request is the one occupying the sidecar's loop. */
+  longRunning: boolean;
+  /** When this request gave up, so a queued one can wait at least that long. */
+  deadlineAt: number;
 }
 
 export interface LocalSynthesisResult {
@@ -58,10 +71,16 @@ export class LocalTtsProvider {
   private nextId = 1;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly spawnFn: SpawnFn;
+  private readonly timeouts: Record<string, number>;
   private lastAvailability: { value: boolean; checkedAt: number } | null = null;
 
-  constructor(spawnFn: SpawnFn = spawn) {
+  constructor(
+    spawnFn: SpawnFn = spawn,
+    /** Command budgets, overridable so tests need not wait out a real one. */
+    timeouts: Record<string, number> = {}
+  ) {
     this.spawnFn = spawnFn;
+    this.timeouts = { ...COMMAND_TIMEOUTS, ...timeouts };
   }
 
   /** Python interpreter + sidecar script must both be present. */
@@ -210,12 +229,21 @@ export class LocalTtsProvider {
     this.assertAvailable();
     const child = this.ensureChild();
     const id = this.nextId++;
+    const longRunning = LONG_COMMANDS.has(command);
+    const budget = this.budgetFor(command, longRunning);
 
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.forgetPending(id);
         // A stuck sidecar is worse than a fresh one: restart and fail loudly.
-        this.dispose();
+        // But only when nothing else is using it — the child is a single shared
+        // process holding the warm XTTS model, and killing it for a command that
+        // merely timed out also failed whatever synthesis was running. A
+        // `list-voices` queued behind a five-minute synthesis used to hit its
+        // own 30s budget and take that generation down with it (503).
+        if (this.pending.size === 0) {
+          this.dispose();
+        }
         reject(
           new AppError(
             504,
@@ -224,9 +252,15 @@ export class LocalTtsProvider {
             true
           ) as unknown as Error
         );
-      }, COMMAND_TIMEOUTS[command] ?? 60_000);
+      }, budget);
 
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, {
+        resolve,
+        reject,
+        timer,
+        longRunning,
+        deadlineAt: Date.now() + budget,
+      });
       try {
         child.stdin.write(`${JSON.stringify({ id, command, params })}\n`);
       } catch (error) {
@@ -235,6 +269,29 @@ export class LocalTtsProvider {
         reject(crashedError((error as Error).message));
       }
     });
+  }
+
+  /**
+   * Own budget for [command], plus the time it has to wait in the queue.
+   *
+   * The sidecar reads one request at a time and answers it before reading the
+   * next, so a cheap command sent while a synthesis is running waits for all of
+   * it. Judged on its own 30s budget it used to time out while perfectly healthy
+   * and, worse, restart the child that was doing the work.
+   */
+  private budgetFor(command: SidecarCommand, longRunning: boolean): number {
+    const own = this.timeouts[command] ?? 60_000;
+    if (longRunning) {
+      return own;
+    }
+    const now = Date.now();
+    const waiting = [...this.pending.values()]
+      .filter((request) => request.longRunning)
+      .reduce(
+        (longest, request) => Math.max(longest, request.deadlineAt - now),
+        0
+      );
+    return own + Math.max(0, waiting);
   }
 
   private ensureChild(): ChildProcessWithoutNullStreams {

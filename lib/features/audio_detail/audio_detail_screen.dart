@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/design_system/design_tokens.dart';
 import '../../core/localization/app_strings.dart';
+import '../../core/utils/share_origin.dart';
 import '../../data/models/audio_asset.dart';
 import '../audio_library/library_provider.dart';
 import 'audio_detail_provider.dart';
@@ -644,6 +645,7 @@ class _AudioDetailScreenState extends ConsumerState<AudioDetailScreen> {
                   Share.share(
                     audio.filePath,
                     subject: AppStrings.audioDetailShareTitle,
+                    sharePositionOrigin: shareOriginOf(context),
                   );
                 },
               ),

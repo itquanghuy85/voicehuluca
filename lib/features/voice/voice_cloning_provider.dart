@@ -83,12 +83,22 @@ class CloningNotifier extends Notifier<CloningState> {
   // same bounds instead of letting the user record something that will fail.
   static const Duration maxRecordingDuration = recordVoiceMaxDuration;
   static const Duration minRecordingDuration = recordVoiceMinDuration;
+
+  /// Where the recorder actually stops. Counting fixed ticks per callback made
+  /// the counter drift ahead of the audio, so a "30s" recording landed at ~30.7s
+  /// and the backend refused it with SampleTooLong after the user was done.
+  static final Duration autoStopAfter = recordVoiceStopAt;
+
   static const int maxWaveformSamples = 60;
   static const Duration waveformInterval = Duration(milliseconds: 100);
 
   final AudioRecorder _recorder = AudioRecorder();
   Timer? _recordingTimer;
   Timer? _progressTimer;
+
+  /// Wall clock since the recorder opened the file. The recorder writes in real
+  /// time, so this is the only number that matches the length of the sample.
+  final Stopwatch _elapsed = Stopwatch();
 
   TtsRepositoryImpl get _tts => ref.read(ttsRepositoryProvider);
 
@@ -119,6 +129,9 @@ class CloningNotifier extends Notifier<CloningState> {
         'voice_clone_${DateTime.now().millisecondsSinceEpoch}.wav',
       );
       await _recorder.start(recordVoiceConfig, path: filePath);
+      _elapsed
+        ..reset()
+        ..start();
       state = state.copyWith(
         status: CloningStatus.recording,
         recordingDuration: Duration.zero,
@@ -140,6 +153,7 @@ class CloningNotifier extends Notifier<CloningState> {
   }
 
   Future<void> _updateRecording() async {
+    final elapsed = _elapsed.elapsed;
     try {
       final amplitude = await _recorder.getAmplitude();
       final normalized = ((amplitude.current + 60) / 60).clamp(0.05, 1.0);
@@ -147,24 +161,26 @@ class CloningNotifier extends Notifier<CloningState> {
       if (data.length > maxWaveformSamples) {
         data.removeAt(0);
       }
-      final newDuration = state.recordingDuration + waveformInterval;
       state = state.copyWith(
-        recordingDuration: newDuration,
+        recordingDuration: elapsed,
         waveformData: data,
       );
-      if (newDuration >= maxRecordingDuration) {
-        await stopRecording();
-      }
     } catch (_) {
       // Amplitude polling may fail between ticks; keep recording.
+      state = state.copyWith(recordingDuration: elapsed);
+    }
+    if (elapsed >= autoStopAfter) {
+      await stopRecording();
     }
   }
 
   Future<void> stopRecording() async {
     if (state.status != CloningStatus.recording) return;
     _recordingTimer?.cancel();
+    _elapsed.stop();
+    final recorded = _elapsed.elapsed;
     final path = await _recorder.stop();
-    if (path == null || state.recordingDuration < minRecordingDuration) {
+    if (path == null || recorded < minRecordingDuration) {
       state = state.copyWith(
         status: CloningStatus.error,
         errorMessage: AppStrings.errorRecordingTooShort,

@@ -59,6 +59,9 @@ class _VoiceCloningScreenState extends ConsumerState<VoiceCloningScreen>
                   _CloningUnsupportedBanner(
                     onSwitchProvider: _switchToCloningProvider,
                   ),
+                if (state.status == CloningStatus.error &&
+                    state.errorMessage != null)
+                  _CloningErrorBanner(message: state.errorMessage!),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -210,6 +213,51 @@ class _CloningUnsupportedBanner extends StatelessWidget {
                 AppStrings.providerSwitchAction,
                 style: AppTypography.label.copyWith(color: colors.primary),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Says why the last clone failed.
+///
+/// Nothing on this screen read `CloningState.errorMessage`, so a rejected
+/// upload (a sample the sidecar calls too long, a dead backend, a provider
+/// without credentials) left the form looking ready and the tap did nothing
+/// visible at all.
+class _CloningErrorBanner extends StatelessWidget {
+  const _CloningErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColorScheme.of(Theme.of(context).brightness);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
+      padding: AppSpacing.mdAll,
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: AppRadius.mediumAll,
+        border: Border.all(color: colors.error.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(AppIcons.errorOutlined, size: AppSizes.iconMedium, color: colors.error),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.bodySmall.copyWith(color: colors.error),
             ),
           ),
         ],
@@ -553,29 +601,48 @@ class _WaveformView extends StatelessWidget {
   final List<double> data;
   final bool animate;
 
+  /// Fixed bars at a fixed gap, so a 360dp phone in portrait had ~34px more
+  /// bars than fit and the Row overflowed. The count now follows the width.
+  static const double _barWidth = 4;
+  static const double _gap = 4;
+
   @override
   Widget build(BuildContext context) {
     final scheme = AppColorScheme.of(Theme.of(context).brightness);
     return SizedBox(
       height: 64,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: List.generate(40, (index) {
-          final value = index < data.length ? data[index] : 0.0;
-          return AnimatedContainer(
-            duration: animate
-                ? const Duration(milliseconds: 80)
-                : Duration.zero,
-            width: 4,
-            height: 4 + value * 56,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: value > 0 ? scheme.primary : scheme.divider,
-              borderRadius: AppRadius.pillAll,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final fits =
+              (width + _gap) / (_barWidth + _gap);
+          final count = fits.floor().clamp(1, 40);
+          final barsWidth =
+              count * _barWidth + (count - 1) * _gap;
+          return Center(
+            child: SizedBox(
+              width: barsWidth,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: List.generate(count, (index) {
+                  final value = index < data.length ? data[index] : 0.0;
+                  return AnimatedContainer(
+                    duration: animate
+                        ? const Duration(milliseconds: 80)
+                        : Duration.zero,
+                    width: _barWidth,
+                    height: 4 + value * 56,
+                    decoration: BoxDecoration(
+                      color: value > 0 ? scheme.primary : scheme.divider,
+                      borderRadius: AppRadius.pillAll,
+                    ),
+                  );
+                }),
+              ),
             ),
           );
-        }),
+        },
       ),
     );
   }
