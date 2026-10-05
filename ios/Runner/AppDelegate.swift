@@ -19,10 +19,13 @@ import UIKit
   /// Local Network can re-enable it at
   /// Privacy & Security → Local Network → VietVoice Studio.
   private func registerSettingsChannel(registry: FlutterPluginRegistry) {
-    let messenger = registry.binaryMessenger
+    // FlutterPluginRegistry exposes no messenger of its own; a registrar does.
+    guard let registrar = registry.registrar(forPlugin: "VietVoiceSettingsChannel") else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "com.vietvoice.vietvoice_studio/settings",
-      binaryMessenger: messenger
+      binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
       if call.method == "openAppSettings" {
