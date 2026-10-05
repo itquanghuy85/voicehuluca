@@ -2263,6 +2263,9 @@ class AppStrings {
   static const String providerLocalName = 'TTS trên máy';
   static const String providerLocalDesc =
       'Miễn phí, không cần API key, chạy trên máy. Cần cài Python + XTTS ở máy chủ.';
+  static const String providerVoiceStudioName = 'VoiceStudio (PC GPU)';
+  static const String providerVoiceStudioDesc =
+      'Miễn phí, chạy trên máy tính có card đồ họa trong cùng mạng Wi-Fi. Nhân bản giọng nhanh và giống nhất.';
   static const String providerComingSoon = 'Sắp ra mắt';
   static const String providerNotConfigured = 'Chưa cấu hình';
   static const String providerGoogleBadge = 'Mặc định';
@@ -2308,11 +2311,20 @@ class AppStrings {
   static const String recordVoiceTitle = 'Ghi âm giọng mới';
   static const String recordVoiceIntro =
       'Đọc to đoạn văn bản dưới đây bằng giọng tự nhiên của bạn. Âm thanh sẽ được lưu trên máy và dùng lại cho các video sau.';
+  /// Short enough to read in 8–15s, under the 20s sample cap. It is also sent
+  /// as the transcript of the sample, so it must be exactly what gets read.
   static const String recordVoiceSample =
-      'Xin chào, hôm nay mình muốn chia sẻ một vài kinh nghiệm rất nhỏ nhưng khá hữu ích. '
-      'Khi làm nội dung ngắn, điều quan trọng nhất là nói rõ, nói chậm và luôn nhìn vào ống kính. '
-      'Bạn không cần phải nói quá nhanh, cứ tự nhiên là tốt nhất. '
-      'Hy vọng những lời này giúp ích cho bạn trong những video sắp tới.';
+      'Xin chào, hôm nay mình muốn chia sẻ một vài kinh nghiệm nhỏ. '
+      'Khi làm video ngắn, điều quan trọng nhất là nói rõ ràng và thật tự nhiên.';
+  static const String recordVoicePlay = 'Nghe lại bản ghi';
+  static const String recordVoiceStopPlayback = 'Dừng nghe';
+  static const String recordVoicePlaybackFailed =
+      'Không phát được bản ghi. Hãy ghi lại.';
+  static const String recordVoiceTranscriptLabel = 'Nội dung bạn đã đọc';
+  static const String recordVoiceTranscriptHint =
+      'Sửa lại cho đúng từng chữ nếu bạn đọc khác câu mẫu.';
+  static const String recordVoiceTranscriptRequired =
+      'Cần nhập nội dung bạn đã đọc trong bản ghi.';
   static const String recordVoiceNameLabel = 'Tên giọng';
   static const String recordVoiceNameHint = 'Ví dụ: Giọng nữ của tôi';
   static const String recordVoiceStart = 'Bắt đầu ghi âm';

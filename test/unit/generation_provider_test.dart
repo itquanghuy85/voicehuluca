@@ -81,6 +81,7 @@ class _FakeTtsRepository implements TtsRepository {
     required String description,
     required List<File> audioFiles,
     String? language,
+    String? refText,
   }) => throw UnimplementedError();
 
   @override

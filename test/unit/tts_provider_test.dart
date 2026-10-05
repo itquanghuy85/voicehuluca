@@ -13,10 +13,11 @@ import 'package:voice_huluca/data/datasources/remote/tts_remote_datasource.dart'
 import 'package:voice_huluca/data/services/elevenlabs_provider.dart';
 import 'package:voice_huluca/data/services/google_tts_provider.dart';
 import 'package:voice_huluca/data/services/local_tts_provider.dart';
+import 'package:voice_huluca/data/services/voice_studio_provider.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
 import 'package:voice_huluca/data/services/tts_provider_registry.dart';
 import 'package:voice_huluca/features/voice/voice_provider.dart'
-    show mapTtsErrorKind;
+    show mapError, mapTtsErrorKind;
 
 const String _testBaseUrl = 'https://backend.test/v1';
 
@@ -45,6 +46,7 @@ void main() {
     late GoogleTtsProvider google;
     late ElevenLabsProvider elevenLabs;
     late LocalTtsProvider local;
+    late VoiceStudioTtsProvider voiceStudio;
     late TtsProviderRegistry registry;
 
     setUp(() {
@@ -55,7 +57,8 @@ void main() {
       google = GoogleTtsProvider(remote);
       elevenLabs = ElevenLabsProvider(remote);
       local = LocalTtsProvider(remote);
-      registry = TtsProviderRegistry([google, elevenLabs, local]);
+      voiceStudio = VoiceStudioTtsProvider(remote);
+      registry = TtsProviderRegistry([google, elevenLabs, local, voiceStudio]);
     });
 
     test('registers and resolves providers by id', () {
@@ -63,6 +66,7 @@ void main() {
       expect(registry.getById(TtsProviderIds.google), same(google));
       expect(registry.getById(TtsProviderIds.elevenLabs), same(elevenLabs));
       expect(registry.getById(TtsProviderIds.local), same(local));
+      expect(registry.getById(TtsProviderIds.voiceStudio), same(voiceStudio));
       expect(registry.contains(TtsProviderIds.google), isTrue);
     });
 
@@ -87,7 +91,7 @@ void main() {
       );
       registry.register(replacement);
       expect(registry.getById(TtsProviderIds.google), same(replacement));
-      expect(registry.ids.length, 3);
+      expect(registry.ids.length, 4);
     });
 
     test('unregister and clear remove providers', () {
@@ -101,14 +105,120 @@ void main() {
       );
     });
 
-    test('voice cloning is limited to the local and ElevenLabs providers', () {
+    test('voice cloning is limited to ElevenLabs, local and VoiceStudio', () {
       expect(registry.supportsVoiceCloning(TtsProviderIds.google), isFalse);
       expect(registry.supportsVoiceCloning(TtsProviderIds.elevenLabs), isTrue);
       expect(registry.supportsVoiceCloning(TtsProviderIds.local), isTrue);
+      expect(registry.supportsVoiceCloning(TtsProviderIds.voiceStudio), isTrue);
       expect(TtsProviderIds.cloningProviders, [
         TtsProviderIds.elevenLabs,
         TtsProviderIds.local,
+        TtsProviderIds.voiceStudio,
       ]);
+    });
+  });
+
+  group('VoiceStudioTtsProvider', () {
+    test('clone sends provider=voicestudio and the confirmed transcript as ref_text', () async {
+      final file = File('${Directory.systemTemp.path}/vv_vs_clone.wav');
+      await file.writeAsBytes([1, 2, 3]);
+      late http.MultipartRequest sent;
+      final provider = VoiceStudioTtsProvider(
+        _datasource(
+          MockClient.streaming((request, body) async {
+            sent = request as http.MultipartRequest;
+            return http.StreamedResponse(
+              Stream.value(utf8.encode(jsonEncode({'voice_id': 'ab12cd34'}))),
+              200,
+            );
+          }),
+          provider: TtsProviderIds.voiceStudio,
+        ),
+      );
+
+      final voice = await provider.cloneVoice(
+        name: 'Giọng tôi',
+        description: '',
+        audioFiles: [file],
+        language: 'vi',
+        refText: '  Xin chào, tôi đang thử giọng.  ',
+      );
+
+      expect(sent.fields['provider'], TtsProviderIds.voiceStudio);
+      expect(sent.fields['ref_text'], 'Xin chào, tôi đang thử giọng.');
+      expect(sent.files.single.field, 'files');
+      expect(voice.providerVoiceId, 'ab12cd34');
+      expect(voice.provider, TtsProviderIds.voiceStudio);
+      await file.delete();
+    });
+
+    test('an empty transcript is not sent at all', () async {
+      final file = File('${Directory.systemTemp.path}/vv_vs_clone2.wav');
+      await file.writeAsBytes([1, 2, 3]);
+      late http.MultipartRequest sent;
+      final provider = VoiceStudioTtsProvider(
+        _datasource(
+          MockClient.streaming((request, body) async {
+            sent = request as http.MultipartRequest;
+            return http.StreamedResponse(
+              Stream.value(utf8.encode(jsonEncode({'voice_id': 'x'}))),
+              200,
+            );
+          }),
+          provider: TtsProviderIds.voiceStudio,
+        ),
+      );
+      await provider.cloneVoice(
+        name: 'a',
+        description: '',
+        audioFiles: [file],
+        refText: '   ',
+      );
+      expect(sent.fields.containsKey('ref_text'), isFalse);
+      await file.delete();
+    });
+
+    test('the backend explanation is shown as is, never "session expired"', () async {
+      final provider = VoiceStudioTtsProvider(
+        _datasource(
+          MockClient(
+            (_) async => _json({
+              'error': {
+                'code': 'VOICE_STUDIO_CLOSED',
+                'message': 'Máy VoiceStudio đang bật nhưng VoiceStudio chưa mở.',
+                'retryable': true,
+              },
+            }, 503),
+          ),
+          provider: TtsProviderIds.voiceStudio,
+        ),
+      );
+      try {
+        await provider.synthesize(voiceId: 'ab12cd34', text: 'Xin chào');
+        fail('expected an error');
+      } on TtsProviderException catch (error) {
+        expect(error.serverCode, 'VOICE_STUDIO_CLOSED');
+        expect(
+          error.voiceStudioMessage,
+          'Máy VoiceStudio đang bật nhưng VoiceStudio chưa mở.',
+        );
+        expect(
+          mapError(error),
+          'Máy VoiceStudio đang bật nhưng VoiceStudio chưa mở.',
+        );
+        expect(mapError(error), isNot(AppStrings.errorUnauthorized));
+      }
+    });
+
+    test('other providers keep their own messages', () {
+      const error = TtsProviderException(
+        'x',
+        statusCode: 503,
+        kind: TtsErrorKind.unavailable,
+        providerId: TtsProviderIds.local,
+        serverMessage: 'raw backend text',
+      );
+      expect(error.voiceStudioMessage, isNull);
     });
   });
 

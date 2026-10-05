@@ -12,12 +12,15 @@ class TtsProviderIds {
   static const String elevenLabs = 'elevenlabs';
   static const String local = 'local';
 
+  /// VoiceStudio on a GPU PC in the LAN, reached through the backend.
+  static const String voiceStudio = 'voicestudio';
+
   static const String defaultProvider = google;
 
-  static const List<String> all = [google, elevenLabs, local];
+  static const List<String> all = [google, elevenLabs, local, voiceStudio];
 
   /// Providers that can record a sample and turn it into a reusable voice.
-  static const List<String> cloningProviders = [elevenLabs, local];
+  static const List<String> cloningProviders = [elevenLabs, local, voiceStudio];
 
   static bool canClone(String providerId) =>
       cloningProviders.contains(providerId);
@@ -132,6 +135,11 @@ class TtsProviderException implements Exception {
   /// "server not running", "wrong network" and "bad address" applies.
   final NetworkFailure failure;
 
+  /// The backend's own error code and Vietnamese explanation, when it sent one
+  /// (e.g. `VOICE_STUDIO_CLOSED` / "VoiceStudio chưa mở…").
+  final String serverCode;
+  final String serverMessage;
+
   const TtsProviderException(
     this.message, {
     this.statusCode = 0,
@@ -139,7 +147,17 @@ class TtsProviderException implements Exception {
     this.providerId = '',
     this.endpoint = '',
     this.failure = NetworkFailure.unknown,
+    this.serverCode = '',
+    this.serverMessage = '',
   });
+
+  /// VoiceStudio failures are explained precisely by the backend (PC offline,
+  /// VoiceStudio closed, wrong PIN, model loading, recording too long…), so that
+  /// text is shown as is instead of a generic message. Null for other providers.
+  String? get voiceStudioMessage =>
+      providerId == TtsProviderIds.voiceStudio && serverMessage.isNotEmpty
+      ? serverMessage
+      : null;
 
   bool get isRetryable => switch (kind) {
     TtsErrorKind.rateLimit ||
@@ -193,6 +211,10 @@ abstract class TtsProvider {
     required String description,
     required List<File> audioFiles,
     String? language,
+
+    /// Exactly what the speaker says in the sample. Required by VoiceStudio,
+    /// ignored by providers that transcribe on their own.
+    String? refText,
   });
 
   Future<void> deleteVoice(String providerVoiceId);

@@ -182,6 +182,9 @@ Duration generationTimeoutFor({
   required String providerId,
   required int characters,
 }) {
+  if (providerId == TtsProviderIds.voiceStudio) {
+    return AppConstants.voiceStudioGenerationTimeout;
+  }
   if (providerId != TtsProviderIds.local) {
     return AppConstants.generationTimeout;
   }
@@ -593,6 +596,8 @@ class GenerationNotifier extends StateNotifier<GenerationState> {
       return AppStrings.errorNetwork;
     }
     if (error is TtsProviderException) {
+      final voiceStudio = error.voiceStudioMessage;
+      if (voiceStudio != null) return voiceStudio;
       // The local provider shells out to Microsoft Edge TTS, which rate limits
       // aggressively. Say so instead of showing a generic server error.
       if (_activeProviderId() == TtsProviderIds.local &&

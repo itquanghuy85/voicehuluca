@@ -227,6 +227,7 @@ TtsProviderException _unreachable(String detail, Object cause) =>
     required String description,
     required List<File> audioFiles,
     String? language,
+    String? refText,
   }) async {
     final uri = Uri.parse('$baseUrl/voices/clone');
     final request = http.MultipartRequest('POST', uri);
@@ -236,6 +237,10 @@ TtsProviderException _unreachable(String detail, Object cause) =>
     request.fields['description'] = description;
     if (language != null) {
       request.fields['language'] = language;
+    }
+    final transcript = refText?.trim() ?? '';
+    if (transcript.isNotEmpty) {
+      request.fields['ref_text'] = transcript;
     }
 
     for (final file in audioFiles) {
@@ -409,12 +414,15 @@ TtsProviderException _unreachable(String detail, Object cause) =>
 
   TtsProviderException _fromBody(String message, int statusCode, String body) {
     String? code;
+    String? serverMessage;
     try {
       final decoded = jsonDecode(body);
       if (decoded is Map<String, dynamic>) {
         final error = decoded['error'];
         if (error is Map<String, dynamic>) {
           code = error['code'] as String?;
+          final text = error['message'];
+          if (text is String) serverMessage = text;
         }
       }
     } catch (_) {
@@ -427,6 +435,8 @@ TtsProviderException _unreachable(String detail, Object cause) =>
       statusCode: statusCode,
       kind: kind,
       providerId: provider,
+      serverCode: code ?? '',
+      serverMessage: serverMessage ?? '',
     );
   }
 

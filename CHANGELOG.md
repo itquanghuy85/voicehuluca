@@ -3,7 +3,35 @@
 All notable changes to VietVoice Studio. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — Backend LAN / iOS connectivity
+## [Unreleased] — VoiceStudio provider (GPU PC on the LAN)
+
+### Added
+- **`voicestudio` provider.** The backend forwards clone (`POST /profiles`) and
+  speech (`POST /v1/audio/speech`) to VoiceStudio at `VOICESTUDIO_BASE_URL`, with
+  the LAN-share PIN (`x-omnivoice-pin`) or `Authorization: Bearer` only when set.
+  XTTS, Google and ElevenLabs are unchanged. See `DOCS/VOICESTUDIO_LOCAL_SETUP.md`.
+- **`GET /v1/voicestudio/health`** reports reachability, the device VoiceStudio
+  itself reports (CUDA/CPU), version and latency; null where it reports nothing.
+- **"Nghe lại bản ghi"** plays the recorder's original file, reloaded on every
+  press, before anything is uploaded.
+- **Transcript of the sample (`ref_text`)** is sent with every clone; the record
+  sheet pre-fills it with the sample sentence and lets the user correct it.
+- The app switches to VoiceStudio once, the first time the backend reports it ready.
+
+### Changed
+- Voice samples are capped at 20s (recorder stops at 19s): OmniVoice reads at
+  most 20s of reference, and a cut sample with a full transcript makes every
+  generated sentence start with the cut-off words. The sample text is shorter
+  so it fits.
+- Recordings are named `voice_clone_<uuid>.wav`.
+
+### Fixed
+- VoiceStudio answers an unknown voice id with its default voice and HTTP 200;
+  the backend now checks the profile exists and returns `PROFILE_INVALID`.
+- VoiceStudio failures never surface as HTTP 401, which the app shows as
+  "Phiên đăng nhập đã hết hạn"; the backend's Vietnamese explanation is shown.
+
+## Backend LAN / iOS connectivity
 
 ### Fixed
 - **Stale hard-coded backend address.** `AppConstants.apiBaseUrl` defaulted to

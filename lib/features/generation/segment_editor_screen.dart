@@ -376,7 +376,7 @@ class SegmentEditorNotifier extends StateNotifier<SegmentEditorState> {
       return AppStrings.errorNetwork;
     }
     if (error is TtsProviderException) {
-      return mapTtsErrorKind(error.kind);
+      return error.voiceStudioMessage ?? mapTtsErrorKind(error.kind);
     }
     return AppStrings.errorUnknown;
   }

@@ -13,6 +13,7 @@ import ttsRouter from './routes/tts';
 import ttsMultiProviderRouter from './routes/ttsMultiProvider';
 import cloneRouter from './routes/clone';
 import usageRouter from './routes/usage';
+import voiceStudioRouter from './routes/voiceStudio';
 import { describeProviders } from './services/providerRouter';
 
 const app = express();
@@ -57,6 +58,7 @@ app.use(rateLimiter);
 app.use('/v1/providers', (_req, res) => {
   res.json({ providers: describeProviders() });
 });
+app.use('/v1/voicestudio', appApiKeyAuth, voiceStudioRouter);
 app.use('/v1/tts', appApiKeyAuth, ttsMultiProviderRouter);
 app.use('/v1/voices/add', appApiKeyAuth, cloneRouter);
 app.use('/v1/voices/clone', appApiKeyAuth, cloneRouter);

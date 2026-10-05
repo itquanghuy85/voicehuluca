@@ -6,8 +6,9 @@ import { AppError } from '../middleware/errorHandler';
 import * as elevenlabs from './elevenlabs';
 import * as google from './googleTts';
 import { LOCAL_PROVIDER_ID, localTtsProvider } from './localTtsProvider';
+import { VOICESTUDIO_PROVIDER_ID, voiceStudioProvider } from './voiceStudioProvider';
 
-export type ProviderId = 'google' | 'elevenlabs' | 'local';
+export type ProviderId = 'google' | 'elevenlabs' | 'local' | 'voicestudio';
 
 export interface ProviderVoice {
   voice_id: string;
@@ -35,11 +36,16 @@ export interface ProviderDescriptor {
 export const DEFAULT_PROVIDER_ID: ProviderId = 'google';
 
 export function listProviderIds(): string[] {
-  return ['google', 'elevenlabs', LOCAL_PROVIDER_ID];
+  return ['google', 'elevenlabs', LOCAL_PROVIDER_ID, VOICESTUDIO_PROVIDER_ID];
 }
 
 export function isKnownProvider(id: string): id is ProviderId {
-  return id === 'google' || id === 'elevenlabs' || id === LOCAL_PROVIDER_ID;
+  return (
+    id === 'google' ||
+    id === 'elevenlabs' ||
+    id === LOCAL_PROVIDER_ID ||
+    id === VOICESTUDIO_PROVIDER_ID
+  );
 }
 
 export function resolveProvider(id: string | undefined | null): ProviderId {
@@ -59,7 +65,11 @@ export function resolveProvider(id: string | undefined | null): ProviderId {
 }
 
 export function supportsVoiceCloning(provider: ProviderId): boolean {
-  if (provider === 'elevenlabs' || provider === LOCAL_PROVIDER_ID) {
+  if (
+    provider === 'elevenlabs' ||
+    provider === LOCAL_PROVIDER_ID ||
+    provider === VOICESTUDIO_PROVIDER_ID
+  ) {
     return true;
   }
   return google.supportsGoogleVoiceCloning();
@@ -71,6 +81,9 @@ export function isProviderAvailable(provider: ProviderId): boolean {
   }
   if (provider === LOCAL_PROVIDER_ID) {
     return localTtsProvider.refreshAvailability();
+  }
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    return voiceStudioProvider.isAvailable();
   }
   return elevenlabs.isApiKeyConfigured();
 }
@@ -95,6 +108,12 @@ export function describeProviders(): ProviderDescriptor[] {
       supportsVoiceCloning: supportsVoiceCloning(LOCAL_PROVIDER_ID),
       available: isProviderAvailable(LOCAL_PROVIDER_ID),
     },
+    {
+      id: VOICESTUDIO_PROVIDER_ID,
+      name: 'VoiceStudio (PC GPU)',
+      supportsVoiceCloning: supportsVoiceCloning(VOICESTUDIO_PROVIDER_ID),
+      available: isProviderAvailable(VOICESTUDIO_PROVIDER_ID),
+    },
   ];
 }
 
@@ -114,6 +133,9 @@ export async function getVoices(
   }
   if (provider === LOCAL_PROVIDER_ID) {
     return localTtsProvider.listVoices(language);
+  }
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    return voiceStudioProvider.listVoices();
   }
   const voices = await elevenlabs.getVoices();
   return voices.map((voice) => ({
@@ -164,6 +186,13 @@ export async function synthesize(
     });
     return { audio: result.audio, format: result.format, engine: result.engine };
   }
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    return voiceStudioProvider.synthesize({
+      voiceId: request.voiceId,
+      text: request.text,
+      speed: request.speed,
+    });
+  }
   const audio = await elevenlabs.textToSpeechAudio({
     voiceId: request.voiceId,
     text: request.text,
@@ -195,7 +224,9 @@ export function cloningProviderSuggestions(): Array<{
       reason:
         provider.id === LOCAL_PROVIDER_ID
           ? 'Chạy trên máy, miễn phí, không cần API key.'
-          : 'Chất lượng cao, có thể phát sinh phí theo gói.',
+          : provider.id === VOICESTUDIO_PROVIDER_ID
+            ? 'Chạy trên PC có GPU trong mạng LAN, miễn phí.'
+            : 'Chất lượng cao, có thể phát sinh phí theo gói.',
     }));
 }
 
@@ -218,9 +249,23 @@ export async function cloneVoice(
     files: Express.Multer.File[];
     description?: string;
     language?: string;
+    /** What the speaker actually said in the sample, confirmed by the user. */
+    refText?: string;
   }
 ): Promise<{ voice_id: string; status: string; modelReady?: boolean; warning?: string }> {
   assertVoiceCloningSupported(provider);
+
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    const sample = params.files[0];
+    const result = await voiceStudioProvider.cloneVoice({
+      name: params.name,
+      sample: sample.buffer,
+      filename: sample.originalname,
+      refText: params.refText ?? '',
+      language: params.language ?? 'vi',
+    });
+    return { voice_id: result.voiceId, status: 'completed', modelReady: true };
+  }
 
   if (provider === LOCAL_PROVIDER_ID) {
     const sample = params.files[0];
@@ -283,6 +328,10 @@ export async function deleteVoice(
     await localTtsProvider.deleteClone(voiceId);
     return { success: true };
   }
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    await voiceStudioProvider.deleteVoice(voiceId);
+    return { success: true };
+  }
   return elevenlabs.deleteVoice(voiceId);
 }
 
@@ -293,6 +342,9 @@ export async function getUsage(provider: ProviderId): Promise<ProviderUsage | nu
   }
   if (provider === LOCAL_PROVIDER_ID) {
     return localTtsProvider.getUsage();
+  }
+  if (provider === VOICESTUDIO_PROVIDER_ID) {
+    return null;
   }
   const usage = await elevenlabs.getUsage();
   return {

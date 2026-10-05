@@ -282,6 +282,7 @@ class CloningNotifier extends Notifier<CloningState> {
         description: transcript?.trim() ?? '',
         audioFiles: [sample],
         language: 'vi',
+        refText: transcript,
       );
       _progressTimer?.cancel();
       state = state.copyWith(
@@ -342,6 +343,8 @@ class CloningNotifier extends Notifier<CloningState> {
       return AppStrings.errorNetwork;
     }
     if (error is TtsProviderException) {
+      final voiceStudio = error.voiceStudioMessage;
+      if (voiceStudio != null) return voiceStudio;
       switch (error.kind) {
         case TtsErrorKind.unconfigured:
           return AppStrings.errorBackendNotConfigured;

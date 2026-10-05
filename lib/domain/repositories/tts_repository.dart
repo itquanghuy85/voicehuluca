@@ -21,6 +21,7 @@ abstract class TtsRepository {
     required String description,
     required List<File> audioFiles,
     String? language,
+    String? refText,
   });
 
   Future<TtsUsage?> getUsage();

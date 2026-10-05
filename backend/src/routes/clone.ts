@@ -28,7 +28,7 @@ function parseFiles(req: Request): Express.Multer.File[] {
 }
 
 async function handleClone(req: Request, res: Response): Promise<void> {
-  const { name, description, language, provider: rawProvider } = req.body;
+  const { name, description, language, provider: rawProvider, ref_text: refText } = req.body;
   const provider = resolveProvider(rawProvider ?? DEFAULT_PROVIDER_ID);
 
   if (typeof name !== 'string' || name.trim().length === 0) {
@@ -52,6 +52,7 @@ async function handleClone(req: Request, res: Response): Promise<void> {
     files,
     description: typeof description === 'string' ? description : undefined,
     language: typeof language === 'string' ? language : undefined,
+    refText: typeof refText === 'string' ? refText : undefined,
   });
 
   res.set('X-Tts-Provider', provider);

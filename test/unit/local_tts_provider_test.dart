@@ -352,14 +352,17 @@ void main() {
       expect(recordVoiceConfig.numChannels, 1);
     });
 
-    test('the requested sample length is 5-30 seconds', () {
+    test('the requested sample length is 5-20 seconds (VoiceStudio reads at most 20s)', () {
       expect(recordVoiceMinDuration, const Duration(seconds: 5));
-      expect(recordVoiceMaxDuration, const Duration(seconds: 30));
+      expect(recordVoiceMaxDuration, const Duration(seconds: 20));
+      expect(recordVoiceStopAt, lessThan(recordVoiceMaxDuration));
     });
 
     test('the user is given Vietnamese sample text to read', () {
       expect(AppStrings.recordVoiceSample, isNotEmpty);
-      expect(AppStrings.recordVoiceSample.length, greaterThan(200));
+      // Long enough for a 5s+ sample, short enough to read well under 20s:
+      // it doubles as the transcript, so the whole text must fit in the sample.
+      expect(AppStrings.recordVoiceSample.length, inInclusiveRange(80, 180));
     });
   });
 }

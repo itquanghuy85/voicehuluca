@@ -5,9 +5,11 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:uuid/uuid.dart';
 import 'package:voice_huluca/core/app/app_settings_opener.dart';
 import 'package:voice_huluca/core/audio/recording_analyzer.dart';
 import 'package:voice_huluca/core/audio/voice_sample_config.dart';
@@ -47,6 +49,21 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   final AudioRecorder _recorder = AudioRecorder();
   final TextEditingController _nameController = TextEditingController();
 
+  /// What the user actually said. Starts as the sample text; VoiceStudio needs
+  /// it word for word, otherwise misheard words leak into every sentence.
+  final TextEditingController _transcriptController = TextEditingController(
+    text: AppStrings.recordVoiceSample,
+  );
+
+  /// Plays the original file exactly as recorded, never a converted copy.
+  final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<PlayerState>? _playerSub;
+  bool _isPlaying = false;
+
+  /// The file the recorder wrote, kept apart from the 16-bit copy that is
+  /// uploaded, so "Nghe lại" proves what the microphone captured.
+  String? _originalPath;
+
   Timer? _timer;
   Duration _elapsed = Duration.zero;
 
@@ -75,14 +92,44 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   @override
   void initState() {
     super.initState();
+    _playerSub = _player.playerStateStream.listen((state) {
+      final playing =
+          state.playing && state.processingState != ProcessingState.completed;
+      if (mounted && playing != _isPlaying) {
+        setState(() => _isPlaying = playing);
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _playerSub?.cancel();
+    _player.dispose();
     _nameController.dispose();
+    _transcriptController.dispose();
     _recorder.dispose();
     super.dispose();
+  }
+
+  /// Loads the file fresh on every press so a previous recording can never be
+  /// what plays.
+  Future<void> _togglePlayback() async {
+    if (_isPlaying) {
+      await _player.stop();
+      return;
+    }
+    final path = _originalPath ?? _recordingPath;
+    if (path == null) return;
+    try {
+      await _player.stop();
+      await _player.setFilePath(path);
+      await _player.play();
+    } catch (error) {
+      debugPrint('[voice-record] playback failed on $path: $error');
+      if (!mounted) return;
+      setState(() => _error = AppStrings.recordVoicePlaybackFailed);
+    }
   }
 
   bool get _hasSample => _recordingPath != null;
@@ -105,18 +152,21 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   /// the recording so it can be retried without recording again.
   Future<void> _discardSample() async {
     if (_isSaving || _isRecording) return;
-    final path = _recordingPath;
+    await _player.stop();
+    final paths = {?_recordingPath, ?_originalPath};
     setState(() {
       _recordingPath = null;
+      _originalPath = null;
       _elapsed = Duration.zero;
       _error = null;
       _canRetry = false;
     });
-    if (path == null) return;
-    try {
-      await File(path).delete();
-    } on Object {
-      // Best effort: the file is already forgotten by the UI.
+    for (final path in paths) {
+      try {
+        await File(path).delete();
+      } on Object {
+        // Best effort: the file is already forgotten by the UI.
+      }
     }
   }
 
@@ -128,7 +178,8 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       _hasSample &&
       !_isSaving &&
       _elapsed >= _minDuration &&
-      _nameController.text.trim().isNotEmpty;
+      _nameController.text.trim().isNotEmpty &&
+      _transcriptController.text.trim().isNotEmpty;
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
@@ -139,7 +190,9 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
   }
 
   Future<void> _startRecording() async {
+    await _player.stop();
     setState(() {
+      _originalPath = null;
       _error = null;
       _needsMicPermission = false;
       _elapsed = Duration.zero;
@@ -160,7 +213,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
     final directory = await getTemporaryDirectory();
     final path = p.join(
       directory.path,
-      'vietvoice_sample_${DateTime.now().millisecondsSinceEpoch}.wav',
+      'voice_clone_${const Uuid().v4()}.wav',
     );
 
     try {
@@ -258,6 +311,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       debugPrint('[voice-record] usable sample: ${usablePath.path}');
       if (!mounted) return;
       setState(() {
+        _originalPath = path;
         _recordingPath = usablePath.path;
         if (quality.duration > _elapsed) _elapsed = quality.duration;
         _error = null;
@@ -311,6 +365,12 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
       setState(() => _error = AppStrings.recordVoiceTooShort);
       return;
     }
+    final transcript = _transcriptController.text.trim();
+    if (transcript.isEmpty) {
+      setState(() => _error = AppStrings.recordVoiceTranscriptRequired);
+      return;
+    }
+    await _player.stop();
 
     setState(() {
       _isSaving = true;
@@ -336,6 +396,7 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
         description: '',
         audioFiles: [File(path)],
         language: 'vi',
+        refText: transcript,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -451,6 +512,54 @@ class _RecordVoiceSheetState extends ConsumerState<RecordVoiceSheet> {
                         ),
                       ),
                     ),
+                  ),
+                ],
+                if (_hasSample && !_isRecording) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(
+                    height: AppSizes.buttonLarge,
+                    child: OutlinedButton.icon(
+                      onPressed: _isSaving ? null : _togglePlayback,
+                      icon: Icon(
+                        _isPlaying
+                            ? Icons.stop_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                      label: Text(
+                        _isPlaying
+                            ? AppStrings.recordVoiceStopPlayback
+                            : AppStrings.recordVoicePlay,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.largeAll,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _transcriptController,
+                    enabled: !_isSaving,
+                    minLines: 2,
+                    maxLines: 4,
+                    style: AppTypography.body.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.recordVoiceTranscriptLabel,
+                      helperText: AppStrings.recordVoiceTranscriptHint,
+                      helperMaxLines: 2,
+                      errorText:
+                          _error == AppStrings.recordVoiceTranscriptRequired
+                          ? _error
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: AppRadius.mediumAll,
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),

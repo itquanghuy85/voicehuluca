@@ -1585,6 +1585,8 @@ class _ProviderOptionTile extends StatelessWidget {
         return AppStrings.providerGoogleDesc;
       case TtsProviderIds.elevenLabs:
         return AppStrings.providerElevenLabsDesc;
+      case TtsProviderIds.voiceStudio:
+        return AppStrings.providerVoiceStudioDesc;
       default:
         return AppStrings.providerLocalDesc;
     }

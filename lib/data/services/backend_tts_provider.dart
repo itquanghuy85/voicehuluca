@@ -48,6 +48,7 @@ abstract class BackendTtsProvider implements TtsProvider {
     required String description,
     required List<File> audioFiles,
     String? language,
+    String? refText,
   }) async {
     if (!supportsVoiceCloning) {
       throw TtsOperationNotSupportedException(
@@ -60,6 +61,7 @@ abstract class BackendTtsProvider implements TtsProvider {
       description: description,
       audioFiles: audioFiles,
       language: language,
+      refText: refText,
     );
   }
 

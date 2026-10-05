@@ -23,6 +23,10 @@ class AppConstants {
   /// generous and a wedged call still ends in a retryable error.
   static const Duration generationTimeout = Duration(minutes: 5);
 
+  /// VoiceStudio renders a whole script in one request; the backend waits up to
+  /// 15 minutes for it, so the app waits a little longer than that.
+  static const Duration voiceStudioGenerationTimeout = Duration(minutes: 16);
+
   /// Floor for a local generation, on top of the per-character allowance below.
   static const Duration localGenerationBaseTimeout = Duration(minutes: 10);
 

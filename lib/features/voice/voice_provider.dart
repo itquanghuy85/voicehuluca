@@ -27,6 +27,7 @@ import 'package:voice_huluca/data/repositories/tts_repository_impl.dart';
 import 'package:voice_huluca/data/services/elevenlabs_provider.dart';
 import 'package:voice_huluca/data/services/google_tts_provider.dart';
 import 'package:voice_huluca/data/services/local_tts_provider.dart';
+import 'package:voice_huluca/data/services/voice_studio_provider.dart';
 import 'package:voice_huluca/data/services/tts_provider.dart';
 import 'package:voice_huluca/data/services/tts_provider_registry.dart';
 
@@ -170,7 +171,37 @@ class TtsProviderIdNotifier extends Notifier<String> {
     ref.onDispose(() => _disposed = true);
     // Deferred so the stored choice is never written during the build phase.
     Future<void>.delayed(Duration.zero, () => _loadFromSettings(settings));
+    ref.listen<String>(backendUrlProvider, (_, url) {
+      if (url.isNotEmpty) unawaited(_preferVoiceStudioOnce());
+    }, fireImmediately: true);
     return AppConstants.defaultTtsProvider;
+  }
+
+  bool _checkingVoiceStudio = false;
+
+  /// Switches to VoiceStudio once, the first time the backend reports it ready.
+  ///
+  /// A marker file records that the switch happened, so a user who later picks
+  /// another provider in Settings keeps that choice. Nothing is switched while
+  /// the backend is unreachable or has no VoiceStudio configured.
+  Future<void> _preferVoiceStudioOnce() async {
+    if (_checkingVoiceStudio) return;
+    _checkingVoiceStudio = true;
+    try {
+      final directory = await getApplicationSupportDirectory();
+      final marker = File(p.join(directory.path, 'voicestudio_default_applied'));
+      if (await marker.exists()) return;
+      final availability = await ref
+          .read(ttsRemoteDataSourceProvider)
+          .getProviderAvailability();
+      if (availability[TtsProviderIds.voiceStudio] != true || _disposed) return;
+      await marker.create(recursive: true);
+      await setProvider(TtsProviderIds.voiceStudio);
+    } catch (error) {
+      debugPrint('[provider] VoiceStudio check skipped: $error');
+    } finally {
+      _checkingVoiceStudio = false;
+    }
   }
 
   Future<void> _loadFromSettings(SettingsLocalDataSource settings) async {
@@ -322,6 +353,7 @@ final ttsProviderRegistryProvider = Provider<TtsProviderRegistry>((ref) {
     GoogleTtsProvider(remote),
     ElevenLabsProvider(remote),
     LocalTtsProvider(remote),
+    VoiceStudioTtsProvider(remote),
   ]);
 });
 
@@ -657,6 +689,8 @@ class VoiceListNotifier extends Notifier<VoiceListState> {
 /// Voice-list failures in the user's language.
 String mapError(Object error) {
   if (error is TtsProviderException) {
+    final voiceStudio = error.voiceStudioMessage;
+    if (voiceStudio != null) return voiceStudio;
     return mapTtsErrorKind(
       error.kind,
       endpoint: error.endpoint,

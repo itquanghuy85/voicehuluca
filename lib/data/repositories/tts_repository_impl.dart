@@ -187,12 +187,14 @@ Future<BackendHealth> checkHealth() => _remote.checkHealth();
     required String description,
     required List<File> audioFiles,
     String? language,
+    String? refText,
   }) async {
     final voice = await _remote.cloneVoice(
       name: name,
       description: description,
       audioFiles: audioFiles,
       language: language,
+      refText: refText,
     );
     final existing = await _local.getVoiceByProviderId(
       voice.provider,

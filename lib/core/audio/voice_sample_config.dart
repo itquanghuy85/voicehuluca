@@ -17,16 +17,21 @@ const RecordConfig recordVoiceConfig = RecordConfig(
   autoGain: true,
 );
 
-/// Sample length XTTS works best in.
+/// Sample length every cloning engine accepts.
+///
+/// VoiceStudio (OmniVoice) conditions on at most 20s of reference audio; a
+/// longer sample is cut while its transcript is not, and the cut-off words are
+/// then spoken in front of every generated sentence. XTTS accepts up to 30s but
+/// works best well under that, so one 20s cap serves both.
 const Duration recordVoiceMinDuration = Duration(seconds: 5);
-const Duration recordVoiceMaxDuration = Duration(seconds: 30);
+const Duration recordVoiceMaxDuration = Duration(seconds: 20);
 
 /// How early the recorder stops itself so the file stays inside the limit.
 ///
-/// The sidecar rejects anything longer than [recordVoiceMaxDuration], and the
+/// The backend rejects anything at or past [recordVoiceMaxDuration], and the
 /// recorder keeps writing for a moment after the stop request lands. Stopping on
-/// the counter alone therefore produced ~30.7s files for a 30s cap, which the
-/// backend then refused with `SampleTooLong` after the user had already recorded.
+/// the counter alone therefore produced files ~0.7s over the cap, which the
+/// backend then refused after the user had already recorded.
 const Duration recordVoiceStopMargin = Duration(seconds: 1);
 
 /// Length the recorder actually stops at: the cap minus [recordVoiceStopMargin].
